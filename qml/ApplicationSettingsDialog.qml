@@ -15,6 +15,28 @@ KartonDialog {
     property string imagesFolderError: ""
     property var connections: []
     readonly property var editorThemes: Karton.xmlEditorThemes()
+    readonly property var consoleThemes: Karton.consoleThemes()
+    readonly property var consoleThemeData: {
+        for (let i = 0; i < root.consoleThemes.length; ++i) {
+            if (root.consoleThemes[i].id === Karton.consoleTheme) {
+                return root.consoleThemes[i];
+            }
+        }
+        return root.consoleThemes.length > 0
+            ? root.consoleThemes[0]
+            : ({ background: Kirigami.Theme.backgroundColor, foreground: Kirigami.Theme.textColor, ansi: [] });
+    }
+    readonly property var monospaceFontModel: {
+        const families = Karton.monospaceFontFamilies();
+        const model = [];
+        for (let i = 0; i < families.length; ++i) {
+            model.push({
+                label: families[i] === "monospace" ? "Monospace" : families[i],
+                value: families[i]
+            });
+        }
+        return model;
+    }
     readonly property int controlWidth: 260
     readonly property var categories: [
         { label: qsTr("application") },
@@ -41,6 +63,13 @@ KartonDialog {
         consoleCursorCombo.currentIndex = cursorShape === "bar" ? 1 : cursorShape === "underline" ? 2 : 0;
         imagesFolderField.text = Karton.imagesDirectory();
         refreshConnections();
+    }
+
+    function consoleAnsiColor(theme, index) {
+        if (theme && theme.ansi && theme.ansi.length > index) {
+            return theme.ansi[index];
+        }
+        return theme && theme.foreground ? theme.foreground : Kirigami.Theme.textColor;
     }
 
     function editorThemeColor(theme, role) {
@@ -366,6 +395,25 @@ KartonDialog {
                                     onValueModified: Karton.saveGlobalConsoleFontSize(value)
                                 }
                                 Controls.Label {
+                                    text: qsTr("font_family")
+                                    font.pixelSize: 14
+                                    Layout.fillWidth: true
+                                    Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                                }
+                                Controls.ComboBox {
+                                    id: consoleFontCombo
+                                    model: root.monospaceFontModel
+                                    textRole: "label"
+                                    valueRole: "value"
+                                    currentIndex: {
+                                        const index = model.findIndex(item => item.value === Karton.consoleFontFamily);
+                                        return index >= 0 ? index : 0;
+                                    }
+                                    Layout.preferredWidth: root.controlWidth
+                                    Layout.alignment: Qt.AlignRight
+                                    onActivated: Karton.saveConsoleFontFamily(currentValue)
+                                }
+                                Controls.Label {
                                     text: qsTr("cursor_shape")
                                     font.pixelSize: 14
                                     Layout.fillWidth: true
@@ -388,11 +436,92 @@ KartonDialog {
                                 }
                             }
 
+                            Controls.Label {
+                                text: qsTr("color_scheme")
+                                font.pixelSize: 15
+                                font.weight: Font.Bold
+                                Layout.fillWidth: true
+                                Layout.topMargin: 8
+                            }
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 1
+                                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                            }
+
+                            ListView {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: Math.max(Kirigami.Units.gridUnit * 8, Math.min(contentHeight, Kirigami.Units.gridUnit * 12))
+                                clip: true
+                                model: root.consoleThemes
+                                spacing: 2
+
+                                delegate: Controls.ItemDelegate {
+                                    width: ListView.view.width
+                                    highlighted: modelData.id === Karton.consoleTheme
+                                    onClicked: Karton.saveConsoleTheme(modelData.id)
+
+                                    contentItem: RowLayout {
+                                        spacing: 12
+
+                                        Rectangle {
+                                            Layout.preferredWidth: 132
+                                            Layout.preferredHeight: 28
+                                            radius: 4
+                                            color: modelData.background
+                                            border.width: 1
+                                            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.25)
+
+                                            RowLayout {
+                                                anchors.centerIn: parent
+                                                spacing: 0
+                                                Controls.Label {
+                                                    text: "user"
+                                                    color: root.consoleAnsiColor(modelData, 2)
+                                                    font.family: Karton.consoleFontFamily
+                                                    font.pixelSize: 12
+                                                }
+                                                Controls.Label {
+                                                    text: "@"
+                                                    color: modelData.foreground
+                                                    font.family: Karton.consoleFontFamily
+                                                    font.pixelSize: 12
+                                                }
+                                                Controls.Label {
+                                                    text: "host"
+                                                    color: root.consoleAnsiColor(modelData, 4)
+                                                    font.family: Karton.consoleFontFamily
+                                                    font.pixelSize: 12
+                                                }
+                                                Controls.Label {
+                                                    text: ":~$"
+                                                    color: root.consoleAnsiColor(modelData, 3)
+                                                    font.family: Karton.consoleFontFamily
+                                                    font.pixelSize: 12
+                                                }
+                                            }
+                                        }
+
+                                        Controls.Label {
+                                            Layout.fillWidth: true
+                                            text: modelData.name
+                                            elide: Text.ElideRight
+                                        }
+                                        Kirigami.Icon {
+                                            source: "checkmark-symbolic"
+                                            visible: modelData.id === Karton.consoleTheme
+                                            Layout.preferredWidth: 16
+                                            Layout.preferredHeight: 16
+                                        }
+                                    }
+                                }
+                            }
+
                             Rectangle {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: Math.max(Kirigami.Units.gridUnit * 4, consolePreviewText.implicitHeight + 24)
                                 radius: 6
-                                color: "#101010"
+                                color: root.consoleThemeData.background
                                 border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12)
 
                                 Controls.Label {
@@ -403,8 +532,8 @@ KartonDialog {
                                     anchors.margins: 12
                                     wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                                     verticalAlignment: Text.AlignTop
-                                    color: "#d0d0d0"
-                                    font.family: "monospace"
+                                    color: root.consoleThemeData.foreground
+                                    font.family: Karton.consoleFontFamily
                                     font.pixelSize: consoleFontSpin.value
                                     text: "The quick brown fox jumps over the lazy dog\n0123456789"
                                 }
@@ -457,11 +586,16 @@ KartonDialog {
                                     Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                                 }
                                 Controls.ComboBox {
-                                    model: Karton.monospaceFontFamilies()
-                                    currentIndex: Math.max(0, model.indexOf(Karton.xmlEditorFontFamily))
+                                    model: root.monospaceFontModel
+                                    textRole: "label"
+                                    valueRole: "value"
+                                    currentIndex: {
+                                        const index = model.findIndex(item => item.value === Karton.xmlEditorFontFamily);
+                                        return index >= 0 ? index : 0;
+                                    }
                                     Layout.preferredWidth: root.controlWidth
                                     Layout.alignment: Qt.AlignRight
-                                    onActivated: Karton.saveXmlEditorFontFamily(currentText)
+                                    onActivated: Karton.saveXmlEditorFontFamily(currentValue)
                                 }
                                 Controls.Label {
                                     Layout.columnSpan: 2

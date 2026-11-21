@@ -16,11 +16,21 @@
 #include <QTimer>
 #include <QWheelEvent>
 
-namespace
+TerminalView::TerminalView(QQuickItem *parent)
+    : QQuickPaintedItem(parent)
 {
-QRgb ansiColor(int index)
-{
-    static const QRgb palette[16] = {
+    setAcceptedMouseButtons(Qt::LeftButton);
+    setActiveFocusOnTab(true);
+    setCursor(QCursor(Qt::IBeamCursor));
+    setOpaquePainting(true);
+    setAntialiasing(true);
+
+    m_font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    m_font.setStyleHint(QFont::Monospace);
+    m_font.setFixedPitch(true);
+    m_font.setPixelSize(m_fontSize);
+
+    m_ansiColors = {
         0xff000000,
         0xffcc0000,
         0xff4e9a06,
@@ -38,40 +48,6 @@ QRgb ansiColor(int index)
         0xff34e2e2,
         0xffeeeeec,
     };
-    if (index >= 0 && index < 16) {
-        return palette[index];
-    }
-    if (index >= 16 && index <= 231) {
-        const int value = index - 16;
-        const int r = value / 36;
-        const int g = (value / 6) % 6;
-        const int b = value % 6;
-        const auto component = [](int level) {
-            return level == 0 ? 0 : 55 + level * 40;
-        };
-        return qRgb(component(r), component(g), component(b));
-    }
-    if (index >= 232 && index <= 255) {
-        const int level = 8 + (index - 232) * 10;
-        return qRgb(level, level, level);
-    }
-    return 0xffd0d0d0;
-}
-} // namespace
-
-TerminalView::TerminalView(QQuickItem *parent)
-    : QQuickPaintedItem(parent)
-{
-    setAcceptedMouseButtons(Qt::LeftButton);
-    setActiveFocusOnTab(true);
-    setCursor(QCursor(Qt::IBeamCursor));
-    setOpaquePainting(true);
-    setAntialiasing(true);
-
-    m_font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-    m_font.setStyleHint(QFont::Monospace);
-    m_font.setFixedPitch(true);
-    m_font.setPixelSize(m_fontSize);
 
     m_cells = blankScreen();
 }
@@ -82,6 +58,7 @@ TerminalView::Cell TerminalView::blankCell() const
     // no glyph attributes behind (an inverse or underline erase must not turn
     // the cleared area into a coloured/underlined block).
     Cell cell;
+    cell.fg = m_defaultForeground;
     cell.bg = m_background;
     return cell;
 }
@@ -100,7 +77,7 @@ QVector<TerminalView::Cell> TerminalView::blankScreen() const
 {
     QVector<Cell> cells(m_columns * m_rows);
     for (Cell &cell : cells) {
-        cell = Cell();
+        cell = blankCell();
     }
     return cells;
 }
@@ -123,6 +100,115 @@ void TerminalView::setFontSize(int pixels)
     updateGridGeometry();
     update();
     Q_EMIT fontSizeChanged();
+}
+
+void TerminalView::setFontFamily(const QString &family)
+{
+    if (m_fontFamily == family) {
+        return;
+    }
+    m_fontFamily = family;
+    if (family.isEmpty()) {
+        m_font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+        m_font.setStyleHint(QFont::Monospace);
+    } else {
+        m_font.setFamily(family);
+    }
+    m_font.setFixedPitch(true);
+    m_font.setPixelSize(m_fontSize);
+    updateGridGeometry();
+    update();
+    Q_EMIT fontFamilyChanged();
+}
+
+QRgb TerminalView::ansiColor(int index) const
+{
+    if (index >= 0 && index < m_ansiColors.size()) {
+        return m_ansiColors.at(index);
+    }
+    if (index >= 16 && index <= 231) {
+        const int value = index - 16;
+        const int r = value / 36;
+        const int g = (value / 6) % 6;
+        const int b = value % 6;
+        const auto component = [](int level) {
+            return level == 0 ? 0 : 55 + level * 40;
+        };
+        return qRgb(component(r), component(g), component(b));
+    }
+    if (index >= 232 && index <= 255) {
+        const int level = 8 + (index - 232) * 10;
+        return qRgb(level, level, level);
+    }
+    return m_defaultForeground;
+}
+
+void TerminalView::setColorScheme(const QVariantMap &scheme)
+{
+    if (scheme.isEmpty()) {
+        return;
+    }
+
+    const QColor background(scheme.value(QStringLiteral("background")).toString());
+    const QColor foreground(scheme.value(QStringLiteral("foreground")).toString());
+    QVector<QRgb> ansi = m_ansiColors;
+    const QVariantList ansiValues = scheme.value(QStringLiteral("ansi")).toList();
+    for (int i = 0; i < qMin(16, ansiValues.size()); ++i) {
+        const QColor color(ansiValues.at(i).toString());
+        if (color.isValid()) {
+            ansi[i] = color.rgb();
+        }
+    }
+
+    const QRgb newBackground = background.isValid() ? background.rgb() : m_defaultBackground;
+    const QRgb newForeground = foreground.isValid() ? foreground.rgb() : m_defaultForeground;
+    const QRgb oldBackground = m_defaultBackground;
+    const QRgb oldForeground = m_defaultForeground;
+    const QVector<QRgb> oldAnsi = m_ansiColors;
+
+    if (newBackground == oldBackground && newForeground == oldForeground && ansi == oldAnsi) {
+        m_colorScheme = scheme;
+        return;
+    }
+
+    const auto remap = [&](QRgb color) {
+        if (color == oldForeground) {
+            return newForeground;
+        }
+        if (color == oldBackground) {
+            return newBackground;
+        }
+        const int index = oldAnsi.indexOf(color);
+        if (index >= 0 && index < ansi.size()) {
+            return ansi.at(index);
+        }
+        return color;
+    };
+
+    for (Cell &cell : m_cells) {
+        cell.fg = remap(cell.fg);
+        cell.bg = remap(cell.bg);
+    }
+    for (QVector<Cell> &line : m_scrollback) {
+        for (Cell &cell : line) {
+            cell.fg = remap(cell.fg);
+            cell.bg = remap(cell.bg);
+        }
+    }
+    for (Cell &cell : m_savedCells) {
+        cell.fg = remap(cell.fg);
+        cell.bg = remap(cell.bg);
+    }
+
+    m_defaultBackground = newBackground;
+    m_defaultForeground = newForeground;
+    m_ansiColors = ansi;
+    m_foreground = remap(m_foreground);
+    m_background = remap(m_background);
+    m_colorScheme = scheme;
+
+    update();
+    Q_EMIT colorSchemeChanged();
 }
 
 void TerminalView::setCursorShape(const QString &shape)
@@ -215,7 +301,7 @@ void TerminalView::resizeGrid(int columns, int rows)
 
 void TerminalView::paint(QPainter *painter)
 {
-    painter->fillRect(boundingRect(), QColor(DefaultBackground));
+    painter->fillRect(boundingRect(), QColor(m_defaultBackground));
     painter->setRenderHint(QPainter::TextAntialiasing, true);
     painter->setFont(m_font);
 
@@ -250,7 +336,7 @@ void TerminalView::paint(QPainter *painter)
             }
 
             const QRectF rect(m_originX + column * m_cellWidth, y, m_cellWidth, m_cellHeight);
-            if (background != DefaultBackground) {
+            if (background != m_defaultBackground) {
                 painter->fillRect(rect, QColor(background));
             }
             if (cell.ch != QLatin1Char(' ')) {
@@ -268,7 +354,7 @@ void TerminalView::paint(QPainter *painter)
         const QRectF cursorRect(m_originX + m_cursorColumn * m_cellWidth, m_originY + m_cursorRow * m_cellHeight, m_cellWidth, m_cellHeight);
         const Cell &cell = cellAt(m_cursorColumn, m_cursorRow);
         const bool focused = hasActiveFocus();
-        const QColor cursorColor = focused ? QColor(cell.fg) : QColor(DefaultForeground);
+        const QColor cursorColor = focused ? QColor(cell.fg) : QColor(m_defaultForeground);
         const qreal stroke = qMax(1.0, m_cellHeight / 10.0);
         if (m_cursorShape == QStringLiteral("bar")) {
             painter->fillRect(QRectF(cursorRect.left(), cursorRect.top(), qMax(1.0, m_cellWidth / 8.0), cursorRect.height()), cursorColor);
@@ -356,8 +442,8 @@ void TerminalView::resetTerminal()
     m_applicationCursorKeys = false;
     m_insertMode = false;
     m_bracketedPaste = false;
-    m_foreground = DefaultForeground;
-    m_background = DefaultBackground;
+    m_foreground = m_defaultForeground;
+    m_background = m_defaultBackground;
     m_attributes = 0;
     m_state = State::Ground;
     m_sequence.clear();
@@ -688,8 +774,8 @@ void TerminalView::dispatchCsi(const QString &sequence)
 void TerminalView::applySgr(const QVector<int> &parameters)
 {
     if (parameters.isEmpty()) {
-        m_foreground = DefaultForeground;
-        m_background = DefaultBackground;
+        m_foreground = m_defaultForeground;
+        m_background = m_defaultBackground;
         m_attributes = 0;
         return;
     }
@@ -701,8 +787,8 @@ void TerminalView::applySgr(const QVector<int> &parameters)
         }
         switch (parameter) {
         case 0:
-            m_foreground = DefaultForeground;
-            m_background = DefaultBackground;
+            m_foreground = m_defaultForeground;
+            m_background = m_defaultBackground;
             m_attributes = 0;
             break;
         case 1:
@@ -724,10 +810,10 @@ void TerminalView::applySgr(const QVector<int> &parameters)
             m_attributes &= ~Inverse;
             break;
         case 39:
-            m_foreground = DefaultForeground;
+            m_foreground = m_defaultForeground;
             break;
         case 49:
-            m_background = DefaultBackground;
+            m_background = m_defaultBackground;
             break;
         case 38:
         case 48: {
@@ -735,7 +821,7 @@ void TerminalView::applySgr(const QVector<int> &parameters)
                 break;
             }
             const int mode = parameters.at(++index);
-            QRgb color = DefaultForeground;
+            QRgb color = m_defaultForeground;
             if (mode == 5 && index + 1 < parameters.size()) {
                 color = ansiColor(parameters.at(++index));
             } else if (mode == 2 && index + 3 < parameters.size()) {

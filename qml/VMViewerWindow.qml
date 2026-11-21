@@ -90,6 +90,16 @@ Kirigami.ApplicationWindow {
     // position, so the window does not flash at the fullscreen origin.
     property bool pendingWindowedLimits: false
     property int consoleFontSize: Karton.consoleFontSize(domain)
+    property string consoleFontFamily: Karton.consoleFontFamily()
+    readonly property var consoleColorScheme: {
+        const themes = Karton.consoleThemes();
+        for (let i = 0; i < themes.length; ++i) {
+            if (themes[i].id === Karton.consoleTheme) {
+                return themes[i];
+            }
+        }
+        return themes.length > 0 ? themes[0] : ({});
+    }
 
     // The guest agent is absent while the VM boots and while Windows is at the
     // login screen. Do not show the resize hint immediately: wait for a grace
@@ -101,6 +111,7 @@ Kirigami.ApplicationWindow {
 
     onDomainChanged: {
         consoleFontSize = Karton.consoleFontSize(domain);
+        consoleFontFamily = Karton.consoleFontFamily();
         guestAgentSeen = domain ? Karton.guestAgentSeen(domain) : false;
         guestAgentWarningSuppressed = domain ? Karton.guestAgentWarningShown(domain) : false;
     }
@@ -1050,6 +1061,9 @@ Kirigami.ApplicationWindow {
         function onConsoleFontSizeChanged() {
             viewerWindow.consoleFontSize = Karton.consoleFontSize(viewerWindow.domain);
         }
+        function onConsoleFontFamilyChanged() {
+            viewerWindow.consoleFontFamily = Karton.consoleFontFamily();
+        }
         function onConsoleCursorShapeChanged() {
             serialTerminal.cursorShape = Karton.consoleCursorShape();
         }
@@ -1814,6 +1828,8 @@ Kirigami.ApplicationWindow {
             id: serialTerminal
             anchors.fill: parent
             fontSize: viewerWindow.consoleFontSize
+            fontFamily: viewerWindow.consoleFontFamily
+            colorScheme: viewerWindow.consoleColorScheme
             cursorShape: Karton.consoleCursorShape()
             visible: viewerWindow.isRunning && domainViewer.serialConsoleActive
             enabled: visible

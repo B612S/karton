@@ -364,7 +364,9 @@ Karton style; do not invent a separate layout for a new screen.
   flight; do not close them optimistically after calling `Karton`.
 - `ApplicationSettingsDialog.qml` is the window-attached Luma-style global
   settings overlay. Its Application page selects the UI language and the SPICE
-  defaults; its Console page sets the default serial-console font size; its
+  defaults; its Console page sets the default serial-console font family,
+  size and color scheme (`console/fontFamily`, `console/fontSize`,
+  `console/theme`); its
   Editor page selects the XML editor font, font size and color-scheme preset
   (`editor/fontSize`, `editor/fontFamily`, `editor/theme`); its
   Connections page lists the primary and additional libvirt connections
@@ -882,9 +884,12 @@ Karton style; do not invent a separate layout for a new screen.
   `TerminalView`, which implements the VT100 subset needed by a Linux text
   console (cursor addressing, scrolling, SGR colors, alternate screen and
   common key sequences). Text-only VMs therefore open their tty in Karton just
-  like in virt-manager. `TerminalView::fontSize` is configurable globally in
-  Application Settings → Console and can be overridden per VM in its Display
-  settings; the terminal never scales the font to fill the window. The console
+  like in virt-manager. `TerminalView::fontFamily`/`fontSize`/`colorScheme`
+  are configurable globally in Application Settings → Console; the size can be
+  overridden per VM in its Display settings. `colorScheme` carries the
+  background, default foreground and 16-color ANSI palette, and changing it
+  remaps existing cells and scrollback. The terminal never scales the font to
+  fill the window. The console
   stream must be created with
   `VIR_STREAM_NONBLOCK`: a blocking `virStreamRecv()` runs a nested libvirt
   GLib main loop from inside the stream callback and aborts the process during

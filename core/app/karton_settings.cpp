@@ -339,6 +339,206 @@ void Karton::saveGlobalConsoleFontSize(int pixels)
     Q_EMIT consoleFontSizeChanged();
 }
 
+QString Karton::consoleFontFamily() const
+{
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    const QString family = settings.value(QStringLiteral("console/fontFamily"), QStringLiteral("monospace")).toString().trimmed();
+    return family.isEmpty() ? QStringLiteral("monospace") : family;
+}
+
+void Karton::saveConsoleFontFamily(const QString &family)
+{
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    const QString normalized = family.trimmed().isEmpty() ? QStringLiteral("monospace") : family.trimmed();
+    settings.setValue(QStringLiteral("console/fontFamily"), normalized);
+    Q_EMIT consoleFontFamilyChanged();
+}
+
+QVariantList Karton::consoleThemes() const
+{
+    const auto makeTheme = [](const QString &id, const QString &name, const QString &background, const QString &foreground, const QStringList &ansi) {
+        QVariantMap theme;
+        theme.insert(QStringLiteral("id"), id);
+        theme.insert(QStringLiteral("name"), name);
+        theme.insert(QStringLiteral("background"), background);
+        theme.insert(QStringLiteral("foreground"), foreground);
+        theme.insert(QStringLiteral("ansi"), ansi);
+        return theme;
+    };
+
+    const QStringList tango = {
+        QStringLiteral("#000000"),
+        QStringLiteral("#cc0000"),
+        QStringLiteral("#4e9a06"),
+        QStringLiteral("#c4a000"),
+        QStringLiteral("#3465a4"),
+        QStringLiteral("#75507b"),
+        QStringLiteral("#06989a"),
+        QStringLiteral("#d3d7cf"),
+        QStringLiteral("#555753"),
+        QStringLiteral("#ef2929"),
+        QStringLiteral("#8ae234"),
+        QStringLiteral("#fce94f"),
+        QStringLiteral("#729fcf"),
+        QStringLiteral("#ad7fa8"),
+        QStringLiteral("#34e2e2"),
+        QStringLiteral("#eeeeec"),
+    };
+    const QStringList solarized = {
+        QStringLiteral("#073642"),
+        QStringLiteral("#dc322f"),
+        QStringLiteral("#859900"),
+        QStringLiteral("#b58900"),
+        QStringLiteral("#268bd2"),
+        QStringLiteral("#d33682"),
+        QStringLiteral("#2aa198"),
+        QStringLiteral("#eee8d5"),
+        QStringLiteral("#002b36"),
+        QStringLiteral("#cb4b16"),
+        QStringLiteral("#586e75"),
+        QStringLiteral("#657b83"),
+        QStringLiteral("#839496"),
+        QStringLiteral("#6c71c4"),
+        QStringLiteral("#93a1a1"),
+        QStringLiteral("#fdf6e3"),
+    };
+    const QStringList monokai = {
+        QStringLiteral("#272822"),
+        QStringLiteral("#f92672"),
+        QStringLiteral("#a6e22e"),
+        QStringLiteral("#f4bf75"),
+        QStringLiteral("#66d9ef"),
+        QStringLiteral("#ae81ff"),
+        QStringLiteral("#a1efe4"),
+        QStringLiteral("#f8f8f2"),
+        QStringLiteral("#75715e"),
+        QStringLiteral("#f92672"),
+        QStringLiteral("#a6e22e"),
+        QStringLiteral("#f4bf75"),
+        QStringLiteral("#66d9ef"),
+        QStringLiteral("#ae81ff"),
+        QStringLiteral("#a1efe4"),
+        QStringLiteral("#f9f8f5"),
+    };
+    const QStringList dracula = {
+        QStringLiteral("#21222c"),
+        QStringLiteral("#ff5555"),
+        QStringLiteral("#50fa7b"),
+        QStringLiteral("#f1fa8c"),
+        QStringLiteral("#bd93f9"),
+        QStringLiteral("#ff79c6"),
+        QStringLiteral("#8be9fd"),
+        QStringLiteral("#f8f8f2"),
+        QStringLiteral("#6272a4"),
+        QStringLiteral("#ff6e6e"),
+        QStringLiteral("#69ff94"),
+        QStringLiteral("#ffffa5"),
+        QStringLiteral("#d6acff"),
+        QStringLiteral("#ff92df"),
+        QStringLiteral("#a4ffff"),
+        QStringLiteral("#ffffff"),
+    };
+    const QStringList nord = {
+        QStringLiteral("#3b4252"),
+        QStringLiteral("#bf616a"),
+        QStringLiteral("#a3be8c"),
+        QStringLiteral("#ebcb8b"),
+        QStringLiteral("#81a1c1"),
+        QStringLiteral("#b48ead"),
+        QStringLiteral("#88c0d0"),
+        QStringLiteral("#e5e9f0"),
+        QStringLiteral("#4c566a"),
+        QStringLiteral("#bf616a"),
+        QStringLiteral("#a3be8c"),
+        QStringLiteral("#ebcb8b"),
+        QStringLiteral("#81a1c1"),
+        QStringLiteral("#b48ead"),
+        QStringLiteral("#8fbcbb"),
+        QStringLiteral("#eceff4"),
+    };
+    const QStringList gruvbox = {
+        QStringLiteral("#282828"),
+        QStringLiteral("#cc241d"),
+        QStringLiteral("#98971a"),
+        QStringLiteral("#d79921"),
+        QStringLiteral("#458588"),
+        QStringLiteral("#b16286"),
+        QStringLiteral("#689d6a"),
+        QStringLiteral("#a89984"),
+        QStringLiteral("#928374"),
+        QStringLiteral("#fb4934"),
+        QStringLiteral("#b8bb26"),
+        QStringLiteral("#fabd2f"),
+        QStringLiteral("#83a598"),
+        QStringLiteral("#d3869b"),
+        QStringLiteral("#8ec07c"),
+        QStringLiteral("#ebdbb2"),
+    };
+    const QStringList green = {
+        QStringLiteral("#000000"),
+        QStringLiteral("#00aa00"),
+        QStringLiteral("#00ff00"),
+        QStringLiteral("#00cc00"),
+        QStringLiteral("#00ff88"),
+        QStringLiteral("#00aa00"),
+        QStringLiteral("#00ffcc"),
+        QStringLiteral("#ccffcc"),
+        QStringLiteral("#005500"),
+        QStringLiteral("#00ff00"),
+        QStringLiteral("#88ff88"),
+        QStringLiteral("#00ff00"),
+        QStringLiteral("#00ffff"),
+        QStringLiteral("#00ff00"),
+        QStringLiteral("#00ffff"),
+        QStringLiteral("#ffffff"),
+    };
+
+    return {
+        makeTheme(QStringLiteral("karton-dark"), QStringLiteral("Karton Dark"), QStringLiteral("#101010"), QStringLiteral("#d0d0d0"), tango),
+        makeTheme(QStringLiteral("breeze-dark"), QStringLiteral("Breeze Dark"), QStringLiteral("#232629"), QStringLiteral("#eff0f1"), tango),
+        makeTheme(QStringLiteral("breeze-light"), QStringLiteral("Breeze Light"), QStringLiteral("#eff0f1"), QStringLiteral("#232629"), tango),
+        makeTheme(QStringLiteral("solarized-dark"), QStringLiteral("Solarized Dark"), QStringLiteral("#002b36"), QStringLiteral("#839496"), solarized),
+        makeTheme(QStringLiteral("solarized-light"), QStringLiteral("Solarized Light"), QStringLiteral("#fdf6e3"), QStringLiteral("#657b83"), solarized),
+        makeTheme(QStringLiteral("monokai"), QStringLiteral("Monokai"), QStringLiteral("#272822"), QStringLiteral("#f8f8f2"), monokai),
+        makeTheme(QStringLiteral("dracula"), QStringLiteral("Dracula"), QStringLiteral("#282a36"), QStringLiteral("#f8f8f2"), dracula),
+        makeTheme(QStringLiteral("nord"), QStringLiteral("Nord"), QStringLiteral("#2e3440"), QStringLiteral("#d8dee9"), nord),
+        makeTheme(QStringLiteral("gruvbox-dark"), QStringLiteral("Gruvbox Dark"), QStringLiteral("#282828"), QStringLiteral("#ebdbb2"), gruvbox),
+        makeTheme(QStringLiteral("green-on-black"), QStringLiteral("Green on Black"), QStringLiteral("#000000"), QStringLiteral("#00ff00"), green),
+    };
+}
+
+QString Karton::consoleTheme() const
+{
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    const QString id = settings.value(QStringLiteral("console/theme"), QStringLiteral("karton-dark")).toString();
+    const QVariantList themes = consoleThemes();
+    for (const QVariant &entry : themes) {
+        if (entry.toMap().value(QStringLiteral("id")).toString() == id) {
+            return id;
+        }
+    }
+    return QStringLiteral("karton-dark");
+}
+
+void Karton::saveConsoleTheme(const QString &themeId)
+{
+    QString normalized = themeId;
+    bool found = false;
+    const QVariantList themes = consoleThemes();
+    for (const QVariant &entry : themes) {
+        if (entry.toMap().value(QStringLiteral("id")).toString() == normalized) {
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        normalized = QStringLiteral("karton-dark");
+    }
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    settings.setValue(QStringLiteral("console/theme"), normalized);
+    Q_EMIT consoleThemeChanged();
+}
+
 int Karton::domainConsoleFontSize(const Domain *domain) const
 {
     if (!domain) {

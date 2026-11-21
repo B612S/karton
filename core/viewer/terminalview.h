@@ -6,6 +6,7 @@
 #include <QColor>
 #include <QFont>
 #include <QQuickPaintedItem>
+#include <QVariantMap>
 #include <QVector>
 #include <QtQml/qqmlregistration.h>
 
@@ -22,6 +23,8 @@ class TerminalView : public QQuickPaintedItem
     Q_OBJECT
     QML_ELEMENT
     Q_PROPERTY(int fontSize READ fontSize WRITE setFontSize NOTIFY fontSizeChanged)
+    Q_PROPERTY(QString fontFamily READ fontFamily WRITE setFontFamily NOTIFY fontFamilyChanged)
+    Q_PROPERTY(QVariantMap colorScheme READ colorScheme WRITE setColorScheme NOTIFY colorSchemeChanged)
     Q_PROPERTY(QString cursorShape READ cursorShape WRITE setCursorShape NOTIFY cursorShapeChanged)
 
 public:
@@ -38,6 +41,16 @@ public:
         return m_fontSize;
     }
     void setFontSize(int pixels);
+    QString fontFamily() const
+    {
+        return m_fontFamily;
+    }
+    void setFontFamily(const QString &family);
+    QVariantMap colorScheme() const
+    {
+        return m_colorScheme;
+    }
+    void setColorScheme(const QVariantMap &scheme);
     QString cursorShape() const
     {
         return m_cursorShape;
@@ -47,6 +60,8 @@ public:
 Q_SIGNALS:
     void dataToSend(const QString &text);
     void fontSizeChanged();
+    void fontFamilyChanged();
+    void colorSchemeChanged();
     void cursorShapeChanged();
 
 protected:
@@ -85,10 +100,8 @@ private:
         Charset,
     };
 
-    static constexpr QRgb DefaultForeground = 0xffd0d0d0;
-    static constexpr QRgb DefaultBackground = 0xff101010;
-
     Cell blankCell() const;
+    QRgb ansiColor(int index) const;
     Cell &cellAt(int column, int row);
     const Cell &cellAt(int column, int row) const;
     QVector<Cell> blankScreen() const;
@@ -147,8 +160,12 @@ private:
     bool m_bracketedPaste = false;
     bool m_alternateScreen = false;
 
-    QRgb m_foreground = DefaultForeground;
-    QRgb m_background = DefaultBackground;
+    QRgb m_defaultForeground = 0xffd0d0d0;
+    QRgb m_defaultBackground = 0xff101010;
+    QVector<QRgb> m_ansiColors;
+    QVariantMap m_colorScheme;
+    QRgb m_foreground = m_defaultForeground;
+    QRgb m_background = m_defaultBackground;
     quint8 m_attributes = 0;
     QChar m_lastPrinted = QLatin1Char(' ');
 
@@ -160,6 +177,7 @@ private:
 
     QFont m_font;
     int m_fontSize = 12;
+    QString m_fontFamily;
     QString m_cursorShape = QStringLiteral("block");
     qreal m_cellWidth = 8;
     qreal m_cellHeight = 16;

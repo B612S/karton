@@ -134,6 +134,7 @@ Global Application Settings provide:
 - shared libvirt networks (start/stop, autostart, create NAT, delete);
 - DHCP leases and static reservations for libvirt networks;
 - the default VM image folder and per-connection storage pools;
+- serial-console font, font size, color scheme and cursor shape;
 - XML editor font, font size and color-scheme presets;
 - a Maintenance page that cleans stale data for deleted VMs;
 - About information.

@@ -52,6 +52,8 @@ class Karton : public QObject
     Q_PROPERTY(QString connectionUri READ connectionUri CONSTANT)
     Q_PROPERTY(int viewerCount READ viewerCount NOTIFY viewerCountChanged)
     Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY languageChanged)
+    Q_PROPERTY(QString consoleFontFamily READ consoleFontFamily WRITE saveConsoleFontFamily NOTIFY consoleFontFamilyChanged)
+    Q_PROPERTY(QString consoleTheme READ consoleTheme WRITE saveConsoleTheme NOTIFY consoleThemeChanged)
     Q_PROPERTY(int xmlEditorFontSize READ xmlEditorFontSize WRITE saveXmlEditorFontSize NOTIFY xmlEditorSettingsChanged)
     Q_PROPERTY(QString xmlEditorFontFamily READ xmlEditorFontFamily WRITE saveXmlEditorFontFamily NOTIFY xmlEditorSettingsChanged)
     Q_PROPERTY(QString xmlEditorTheme READ xmlEditorTheme WRITE saveXmlEditorTheme NOTIFY xmlEditorSettingsChanged)
@@ -180,6 +182,8 @@ Q_SIGNALS:
     void errorOccurred(const QString &errorMessage);
     void clipboardSettingsChanged();
     void consoleFontSizeChanged();
+    void consoleFontFamilyChanged();
+    void consoleThemeChanged();
     void xmlEditorSettingsChanged();
     void consoleCursorShapeChanged();
     void imagesDirectoryChanged();
@@ -248,6 +252,11 @@ public Q_SLOTS:
     Q_INVOKABLE void saveClipboardFilesMode(int mode);
     Q_INVOKABLE int globalConsoleFontSize() const;
     Q_INVOKABLE void saveGlobalConsoleFontSize(int pixels);
+    Q_INVOKABLE QString consoleFontFamily() const;
+    Q_INVOKABLE void saveConsoleFontFamily(const QString &family);
+    Q_INVOKABLE QString consoleTheme() const;
+    Q_INVOKABLE void saveConsoleTheme(const QString &themeId);
+    Q_INVOKABLE QVariantList consoleThemes() const;
     Q_INVOKABLE int domainConsoleFontSize(const Domain *domain) const;
     Q_INVOKABLE void saveDomainConsoleFontSize(const Domain *domain, int pixels);
     Q_INVOKABLE int consoleFontSize(const Domain *domain) const;
