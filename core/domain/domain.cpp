@@ -6,7 +6,6 @@
 
 #include <array>
 
-#include <QFile>
 #include <QPainter>
 
 #include <QString>
@@ -176,13 +175,6 @@ void Domain::clearConsolePreview()
 
 void Domain::clearPreviewFrame()
 {
-    const QString previewPath = m_config->screenshotPreviewPath();
-    if (!previewPath.isEmpty()) {
-        // Remove leftovers from versions that persisted previews.
-        QFile::remove(previewPath);
-        QFile::remove(previewPath + QStringLiteral(".tmp.png"));
-        QFile::remove(previewPath + QStringLiteral(".png.tmp.png"));
-    }
     if (m_previewFrame.isNull()) {
         return;
     }

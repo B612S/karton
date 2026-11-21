@@ -559,7 +559,9 @@ QVariantList Karton::domainXmlDevices(const Domain *domain) const
             detail = vendor.isEmpty() ? device.attribute(QStringLiteral("type")) : QStringLiteral("%1:%2").arg(vendor, product);
         } else if (tag == QStringLiteral("video")) {
             detail = childText(QStringLiteral("model"), QStringLiteral("type"));
-        } else if (tag == QStringLiteral("sound") || tag == QStringLiteral("tpm")) {
+        } else if (tag == QStringLiteral("sound")) {
+            detail = device.attribute(QStringLiteral("model")).toUpper();
+        } else if (tag == QStringLiteral("tpm")) {
             detail = device.attribute(QStringLiteral("model"));
         } else if (tag == QStringLiteral("controller")) {
             detail = QStringLiteral("%1 %2").arg(device.attribute(QStringLiteral("type")), device.attribute(QStringLiteral("index")));

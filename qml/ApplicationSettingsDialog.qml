@@ -14,12 +14,15 @@ KartonDialog {
     property int categoryIndex: 0
     property string imagesFolderError: ""
     property var connections: []
+    readonly property var editorThemes: Karton.xmlEditorThemes()
     readonly property int controlWidth: 260
     readonly property var categories: [
         { label: qsTr("application") },
         { label: qsTr("console") },
+        { label: qsTr("editor") },
         { label: qsTr("storage") },
         { label: qsTr("connections") },
+        { label: qsTr("maintenance") },
         { label: qsTr("about") }
     ]
 
@@ -40,14 +43,41 @@ KartonDialog {
         refreshConnections();
     }
 
+    function editorThemeColor(theme, role) {
+        if (theme.system) {
+            if (role === "background") {
+                return Kirigami.Theme.backgroundColor;
+            }
+            if (role === "text") {
+                return Kirigami.Theme.textColor;
+            }
+            if (role === "tag") {
+                return Kirigami.Theme.linkColor;
+            }
+            if (role === "attribute") {
+                return Kirigami.Theme.neutralTextColor;
+            }
+            if (role === "value") {
+                return Kirigami.Theme.positiveTextColor;
+            }
+            if (role === "comment") {
+                return Kirigami.Theme.disabledTextColor;
+            }
+            if (role === "declaration") {
+                return Kirigami.Theme.visitedLinkColor;
+            }
+        }
+        return theme[role];
+    }
+
     function refreshConnections() {
         connections = Karton.connectionInfos();
     }
 
     function openConnections() {
         refreshConnections();
-        root.categoryIndex = 3;
-        categoryList.currentIndex = 3;
+        root.categoryIndex = 4;
+        categoryList.currentIndex = 4;
         if (!root.opened) {
             root.open();
         }
@@ -168,11 +198,9 @@ KartonDialog {
                         spacing: 16
 
                         Controls.Label {
-                            text: root.categoryIndex === 0 ? qsTr("application")
-                                : root.categoryIndex === 1 ? qsTr("console")
-                                : root.categoryIndex === 2 ? qsTr("storage")
-                                : root.categoryIndex === 3 ? qsTr("connections")
-                                : qsTr("about")
+                            text: root.categoryIndex >= 0 && root.categoryIndex < root.categories.length
+                                ? root.categories[root.categoryIndex].label
+                                : ""
                             font.pixelSize: 20
                             font.weight: Font.Bold
                             Layout.fillWidth: true
@@ -239,13 +267,6 @@ KartonDialog {
                                 color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.13)
                             }
 
-                            Rectangle {
-                                Layout.fillWidth: true
-                                height: 1
-                                Layout.topMargin: 4
-                                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.13)
-                            }
-
                             Controls.Label {
                                 text: qsTr("spice_tls")
                                 font.pixelSize: 15
@@ -303,39 +324,6 @@ KartonDialog {
                                 }
                             }
 
-                            Rectangle {
-                                Layout.fillWidth: true
-                                height: 1
-                                Layout.topMargin: 4
-                                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.13)
-                            }
-
-                            Controls.Label {
-                                text: qsTr("maintenance")
-                                font.pixelSize: 15
-                                font.weight: Font.Bold
-                                Layout.fillWidth: true
-                                Layout.topMargin: 2
-                            }
-
-                            Controls.Button {
-                                text: qsTr("clear_preview_images")
-                                icon.name: "image-x-generic-symbolic"
-                                Layout.alignment: Qt.AlignRight
-                                onClicked: {
-                                    const removed = Karton.clearPreviewCache();
-                                    applicationWindow().showPassiveNotification(
-                                        qsTr("removed_1_preview_images").arg(removed));
-                                }
-                            }
-
-                            Controls.Label {
-                                Layout.fillWidth: true
-                                wrapMode: Text.WordWrap
-                                opacity: 0.65
-                                font.pixelSize: 12
-                                text: qsTr("data_for_deleted_vms_previews_and_per_vm_window_audio_display_and_console_settings_is_remo")
-                            }
                         }
 
                         ColumnLayout {
@@ -429,6 +417,159 @@ KartonDialog {
                             spacing: 16
 
                             Controls.Label {
+                                text: qsTr("xml_editor")
+                                font.pixelSize: 15
+                                font.weight: Font.Bold
+                                Layout.fillWidth: true
+                                Layout.topMargin: 2
+                            }
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 1
+                                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                            }
+
+                            GridLayout {
+                                columns: 2
+                                columnSpacing: 16
+                                rowSpacing: 16
+                                Layout.fillWidth: true
+
+                                Controls.Label {
+                                    text: qsTr("font_size")
+                                    font.pixelSize: 14
+                                    Layout.fillWidth: true
+                                    Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                                }
+                                Controls.SpinBox {
+                                    from: 8
+                                    to: 48
+                                    editable: true
+                                    value: Karton.xmlEditorFontSize
+                                    Layout.preferredWidth: root.controlWidth
+                                    Layout.alignment: Qt.AlignRight
+                                    onValueModified: Karton.saveXmlEditorFontSize(value)
+                                }
+                                Controls.Label {
+                                    text: qsTr("font_family")
+                                    font.pixelSize: 14
+                                    Layout.fillWidth: true
+                                    Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                                }
+                                Controls.ComboBox {
+                                    model: Karton.monospaceFontFamilies()
+                                    currentIndex: Math.max(0, model.indexOf(Karton.xmlEditorFontFamily))
+                                    Layout.preferredWidth: root.controlWidth
+                                    Layout.alignment: Qt.AlignRight
+                                    onActivated: Karton.saveXmlEditorFontFamily(currentText)
+                                }
+                                Controls.Label {
+                                    Layout.columnSpan: 2
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    opacity: 0.65
+                                    font.pixelSize: 12
+                                    text: qsTr("xml_editor_font_note")
+                                }
+                            }
+
+                            Controls.Label {
+                                text: qsTr("color_scheme")
+                                font.pixelSize: 15
+                                font.weight: Font.Bold
+                                Layout.fillWidth: true
+                                Layout.topMargin: 8
+                            }
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 1
+                                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                            }
+
+                            ListView {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: Math.max(Kirigami.Units.gridUnit * 8, Math.min(contentHeight, Kirigami.Units.gridUnit * 14))
+                                clip: true
+                                model: root.editorThemes
+                                spacing: 2
+
+                                delegate: Controls.ItemDelegate {
+                                    width: ListView.view.width
+                                    highlighted: modelData.id === Karton.xmlEditorTheme
+                                    onClicked: Karton.saveXmlEditorTheme(modelData.id)
+
+                                    contentItem: RowLayout {
+                                        spacing: 12
+
+                                        Rectangle {
+                                            Layout.preferredWidth: 94
+                                            Layout.preferredHeight: 28
+                                            radius: 4
+                                            color: root.editorThemeColor(modelData, "background")
+                                            border.width: 1
+                                            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.25)
+
+                                            RowLayout {
+                                                anchors.centerIn: parent
+                                                spacing: 0
+                                                Controls.Label {
+                                                    text: "Aa"
+                                                    color: root.editorThemeColor(modelData, "tag")
+                                                    font.family: Karton.xmlEditorFontFamily
+                                                    font.pixelSize: 12
+                                                }
+                                                Controls.Label {
+                                                    text: "Zz"
+                                                    color: root.editorThemeColor(modelData, "attribute")
+                                                    font.family: Karton.xmlEditorFontFamily
+                                                    font.pixelSize: 12
+                                                }
+                                                Controls.Label {
+                                                    text: "09"
+                                                    color: root.editorThemeColor(modelData, "value")
+                                                    font.family: Karton.xmlEditorFontFamily
+                                                    font.pixelSize: 12
+                                                }
+                                                Controls.Label {
+                                                    text: " ..."
+                                                    color: root.editorThemeColor(modelData, "text")
+                                                    font.family: Karton.xmlEditorFontFamily
+                                                    font.pixelSize: 12
+                                                }
+                                            }
+                                        }
+
+                                        Controls.Label {
+                                            Layout.fillWidth: true
+                                            text: modelData.name
+                                            elide: Text.ElideRight
+                                        }
+                                        Kirigami.Icon {
+                                            source: "checkmark-symbolic"
+                                            visible: modelData.id === Karton.xmlEditorTheme
+                                            Layout.preferredWidth: 16
+                                            Layout.preferredHeight: 16
+                                        }
+                                    }
+                                }
+                            }
+                            Controls.Label {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                opacity: 0.65
+                                font.pixelSize: 12
+                                text: qsTr("xml_editor_theme_note")
+                            }
+
+                            Item { Layout.fillHeight: true }
+                        }
+
+                        ColumnLayout {
+                            visible: root.categoryIndex === 3
+                            Layout.fillWidth: true
+                            spacing: 16
+
+                            Controls.Label {
                                 text: qsTr("vm_storage")
                                 font.pixelSize: 15
                                 font.weight: Font.Bold
@@ -462,6 +603,7 @@ KartonDialog {
                                         id: imagesFolderField
                                         Layout.fillWidth: true
                                         readOnly: true
+                                        selectByMouse: true
                                         placeholderText: Karton.defaultImagesDirectory()
                                     }
                                     Controls.Button {
@@ -511,7 +653,7 @@ KartonDialog {
                         }
 
                         ColumnLayout {
-                            visible: root.categoryIndex === 3
+                            visible: root.categoryIndex === 4
                             Layout.fillWidth: true
                             spacing: 12
 
@@ -593,7 +735,60 @@ KartonDialog {
                         }
 
                         ColumnLayout {
-                            visible: root.categoryIndex === 4
+                            visible: root.categoryIndex === 5
+                            Layout.fillWidth: true
+                            spacing: 16
+
+                            Controls.Label {
+                                text: qsTr("cached_data")
+                                font.pixelSize: 15
+                                font.weight: Font.Bold
+                                Layout.fillWidth: true
+                                Layout.topMargin: 2
+                            }
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 1
+                                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                            }
+
+                            GridLayout {
+                                columns: 2
+                                columnSpacing: 16
+                                rowSpacing: 8
+                                Layout.fillWidth: true
+
+                                Controls.Label {
+                                    text: qsTr("deleted_vm_data")
+                                    font.pixelSize: 14
+                                    Layout.fillWidth: true
+                                    Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
+                                }
+                                Controls.Button {
+                                    text: qsTr("clean_up_now")
+                                    icon.name: "edit-clear-history-symbolic"
+                                    Layout.alignment: Qt.AlignRight
+                                    onClicked: {
+                                        const removed = Karton.cleanupStaleCaches();
+                                        applicationWindow().showPassiveNotification(
+                                            qsTr("removed_1_entries").arg(removed));
+                                    }
+                                }
+                                Controls.Label {
+                                    Layout.columnSpan: 2
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    opacity: 0.65
+                                    font.pixelSize: 12
+                                    text: qsTr("deleted_vm_settings_are_removed_automatically")
+                                }
+                            }
+
+                            Item { Layout.fillHeight: true }
+                        }
+
+                        ColumnLayout {
+                            visible: root.categoryIndex === 6
                             Layout.fillWidth: true
                             spacing: 16
 
@@ -638,10 +833,6 @@ KartonDialog {
                 }
             }
         }
-    }
-
-    Controls.ButtonGroup {
-        id: dnsDomainGroup
     }
 
     FileDialog {

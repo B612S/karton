@@ -265,7 +265,7 @@ QString DomainXmlBuilder::updateXML(const QString &xmlDesc, const EditableConfig
     addHardwareElements(document, root, config.maxRam, config.cpus);
 
     // metadata->Karton: only maxDiskStorage is written. Other attributes from
-    // older versions (screenshotPreviewPath) are not editable and must survive.
+    // older versions are not editable and must survive.
     // A value of 0 means the disk size is unknown (e.g. a domain not created by
     // Karton), so leave it untouched.
     if (config.maxDiskStorage > 0) {

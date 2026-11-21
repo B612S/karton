@@ -52,6 +52,9 @@ class Karton : public QObject
     Q_PROPERTY(QString connectionUri READ connectionUri CONSTANT)
     Q_PROPERTY(int viewerCount READ viewerCount NOTIFY viewerCountChanged)
     Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY languageChanged)
+    Q_PROPERTY(int xmlEditorFontSize READ xmlEditorFontSize WRITE saveXmlEditorFontSize NOTIFY xmlEditorSettingsChanged)
+    Q_PROPERTY(QString xmlEditorFontFamily READ xmlEditorFontFamily WRITE saveXmlEditorFontFamily NOTIFY xmlEditorSettingsChanged)
+    Q_PROPERTY(QString xmlEditorTheme READ xmlEditorTheme WRITE saveXmlEditorTheme NOTIFY xmlEditorSettingsChanged)
     Q_PROPERTY(bool holidayMode READ holidayMode NOTIFY holidayModeChanged)
     Q_PROPERTY(QString ovfImportPhase READ ovfImportPhase NOTIFY ovfImportPhaseChanged)
     Q_PROPERTY(int ovfImportProgress READ ovfImportProgress NOTIFY ovfImportProgressChanged)
@@ -154,7 +157,7 @@ public:
     // Cheap reconciliation: compares the libvirt state of every domain with
     // the model and only notifies about the ones that actually changed.
     Q_INVOKABLE void refreshDomainStates();
-    void removeDomainCache(const QString &uuid, const QString &previewPath);
+    void removeDomainCache(const QString &uuid);
     QString getVirtualDiskPath(const QString &domainName, const QString &format = QStringLiteral("qcow2"));
     QString getXmlConfigPath(const QString &domainName);
     int diskSizeGB(const QString &path, bool queryIfMissing = true);
@@ -177,6 +180,7 @@ Q_SIGNALS:
     void errorOccurred(const QString &errorMessage);
     void clipboardSettingsChanged();
     void consoleFontSizeChanged();
+    void xmlEditorSettingsChanged();
     void consoleCursorShapeChanged();
     void imagesDirectoryChanged();
     void domainAdded(Domain *domain);
@@ -247,10 +251,18 @@ public Q_SLOTS:
     Q_INVOKABLE int domainConsoleFontSize(const Domain *domain) const;
     Q_INVOKABLE void saveDomainConsoleFontSize(const Domain *domain, int pixels);
     Q_INVOKABLE int consoleFontSize(const Domain *domain) const;
+    // XML editor appearance (Application Settings -> Editor).
+    Q_INVOKABLE int xmlEditorFontSize() const;
+    Q_INVOKABLE void saveXmlEditorFontSize(int pixels);
+    Q_INVOKABLE QString xmlEditorFontFamily() const;
+    Q_INVOKABLE void saveXmlEditorFontFamily(const QString &family);
+    Q_INVOKABLE QString xmlEditorTheme() const;
+    Q_INVOKABLE void saveXmlEditorTheme(const QString &themeId);
+    Q_INVOKABLE QVariantList xmlEditorThemes() const;
+    Q_INVOKABLE QStringList monospaceFontFamilies() const;
     Q_INVOKABLE QString consoleCursorShape() const;
     Q_INVOKABLE void saveConsoleCursorShape(const QString &shape);
     Q_INVOKABLE int cleanupStaleCaches();
-    Q_INVOKABLE int clearPreviewCache();
     Q_INVOKABLE QString defaultImagesDirectory() const;
     Q_INVOKABLE QString imagesDirectory() const;
     Q_INVOKABLE void saveImagesDirectory(const QString &path);
@@ -347,7 +359,8 @@ public Q_SLOTS:
                                const QString &requestedName,
                                const QString &destinationDirectory,
                                const QString &networkName,
-                               const QString &connectionUri = QString());
+                               const QString &connectionUri = QString(),
+                               const QString &storagePoolName = QString());
     Q_INVOKABLE bool exportOvf(const Domain *domain, const QString &requestedName, const QString &destinationDirectory, bool asOva);
     // Stops an import that is extracting or converting disks.
     Q_INVOKABLE void cancelOvfImport();
@@ -362,6 +375,17 @@ public Q_SLOTS:
     Q_INVOKABLE bool ejectDisk(const Domain *domain);
     Q_INVOKABLE void saveConnectionUri(const QString &uri);
     Q_INVOKABLE bool setAutostart(const Domain *domain, bool autostart);
+    // Used by the XML editor to auto-scroll slowly while a selection is dragged.
+    Q_INVOKABLE bool primaryMouseButtonPressed() const;
+    // Why "Start on boot" would not work yet, as a list of {kind, name}
+    // entries. Karton can fix network/pool autostart itself; enabling the
+    // libvirt systemd service needs administrator rights, so it is reported
+    // to the user instead of being changed behind their back.
+    Q_INVOKABLE QVariantList autostartProblems(const Domain *domain);
+    // Enable autostart for the storage pools and libvirt networks used by the
+    // domain, so a VM with "Start on boot" also gets its disks and network
+    // after a bare reboot.
+    Q_INVOKABLE bool prepareAutostart(const Domain *domain);
     // Host networks of a libvirt connection. An empty URI means the primary
     // connection; every connection has its own set of networks.
     Q_INVOKABLE QVariantList networks(const QString &connectionUri = QString());
@@ -584,6 +608,7 @@ private:
     qint64 m_ovfImportProcessedBytes = 0;
     qint64 m_ovfImportTotalBytes = 0;
     QString m_ovfPendingDestinationDirectory;
+    QString m_ovfPendingStoragePool;
     QString m_ovfPendingNetwork;
     QString m_ovfTargetUri;
     QString m_ovfRequestedName;
@@ -612,12 +637,17 @@ private:
     bool m_busyCancelRequested = false;
     virConnectPtr m_jobConn = nullptr;
     QString m_ovfDestinationDirectory;
+    QString m_ovfStoragePool;
     QString m_ovfNetwork;
     QString m_ovfTemporaryDirectory;
     QStringList m_ovfDiskSources;
     QStringList m_ovfDiskDestinations;
+    QStringList m_ovfDiskVolumeNames;
+    QStringList m_ovfDiskTempFiles;
     QStringList m_ovfDiskCreateCapacities;
     QStringList m_ovfCreatedFiles;
+    QStringList m_ovfCreatedVolumes;
+    bool m_ovfUseStoragePool = false;
     int m_ovfCpus = 2;
     int m_ovfMemoryMiB = 2048;
     int m_ovfNextDisk = 0;
@@ -666,6 +696,11 @@ private:
     mutable QHash<QString, qint64> m_storagePoolsCacheTime;
     mutable QHash<QString, QVariantList> m_storageVolumesCache;
     mutable QHash<QString, qint64> m_storageVolumesCacheTime;
+    // Bumped by every storage mutation. A list request that was started
+    // before the mutation must not overwrite the cache afterwards: that made
+    // the Stop button appear to do nothing when a background refresh was
+    // already in flight.
+    quint64 m_storagePoolsEpoch = 0;
     QSet<QString> m_storagePoolsPending;
     QSet<QString> m_storageVolumesPending;
     QVariantList m_pciDevicesCache;

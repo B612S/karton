@@ -35,7 +35,6 @@ DomainConfig::DomainConfig(const DomainConfigData &data)
     , m_networkName(data.networkName)
     , m_secureBoot(data.secureBoot)
     , m_hasGraphics(data.hasGraphics)
-    , m_screenshotPreviewPath(data.screenshotPreviewPath)
     , m_autostart(data.autostart)
     , m_enableAccel3d(data.enableAccel3d)
 {
@@ -54,7 +53,7 @@ void DomainConfig::apply(const DomainConfigData &data)
     setCpus(data.cpus);
     setMaxDiskStorage(data.maxDiskStorage);
     setAutostart(data.autostart);
-    setPaths(data.xmlConfigPath, data.isoDiskPath, data.virtualDiskPath, data.virtualDiskPaths, data.screenshotPreviewPath);
+    setPaths(data.xmlConfigPath, data.isoDiskPath, data.virtualDiskPath, data.virtualDiskPaths);
 }
 
 void DomainConfig::setActive(bool active)
@@ -145,14 +144,9 @@ void DomainConfig::setMaxDiskStorage(int maxDiskStorage)
     }
 }
 
-void DomainConfig::setPaths(const QString &xmlConfigPath,
-                            const QString &isoDiskPath,
-                            const QString &virtualDiskPath,
-                            const QStringList &virtualDiskPaths,
-                            const QString &screenshotPreviewPath)
+void DomainConfig::setPaths(const QString &xmlConfigPath, const QString &isoDiskPath, const QString &virtualDiskPath, const QStringList &virtualDiskPaths)
 {
-    if (m_xmlConfigPath == xmlConfigPath && m_isoDiskPath == isoDiskPath && m_virtualDiskPath == virtualDiskPath && m_virtualDiskPaths == virtualDiskPaths
-        && m_screenshotPreviewPath == screenshotPreviewPath) {
+    if (m_xmlConfigPath == xmlConfigPath && m_isoDiskPath == isoDiskPath && m_virtualDiskPath == virtualDiskPath && m_virtualDiskPaths == virtualDiskPaths) {
         return;
     }
 
@@ -160,6 +154,5 @@ void DomainConfig::setPaths(const QString &xmlConfigPath,
     m_isoDiskPath = isoDiskPath;
     m_virtualDiskPath = virtualDiskPath;
     m_virtualDiskPaths = virtualDiskPaths;
-    m_screenshotPreviewPath = screenshotPreviewPath;
     Q_EMIT pathsChanged();
 }

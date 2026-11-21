@@ -149,6 +149,7 @@ target_sources(karton
     PRIVATE
     main.cpp
     core/app/karton.cpp
+    core/app/karton_autostart.cpp
     core/app/karton_private.h
     core/app/libvirtconnection.cpp
     core/app/libvirtconnection.h

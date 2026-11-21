@@ -24,7 +24,6 @@
 #include <QDir>
 #include <QDomDocument>
 #include <QDomElement>
-#include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QHostAddress>
@@ -396,7 +395,7 @@ void Karton::dropExtraConnection(LibvirtConnection *connection)
         if (QObject *preview = m_previewViewers.value(uuid)) {
             QMetaObject::invokeMethod(preview, "close");
         }
-        removeDomainCache(uuid, domain->config()->screenshotPreviewPath());
+        removeDomainCache(uuid);
         Q_EMIT domainRemoved(domain);
         domain->setDomainPtr(nullptr);
     }
@@ -1408,13 +1407,6 @@ QVector<Karton::DomainListEntry> Karton::collectDomainList(virConnectPtr conn, b
         const QString name = QString::fromUtf8(virDomainGetName(domainPtr));
         DomainXmlReader reader(domainPtr);
 
-        QString screenshotPreviewPath = reader.m_xmlInfo.screenshotPreviewPath;
-        if (screenshotPreviewPath.isEmpty()) {
-            screenshotPreviewPath = QStringLiteral("%1/previews/%2.png").arg(QStandardPaths::writableLocation(QStandardPaths::StateLocation), uuid);
-        }
-        QFile::remove(screenshotPreviewPath);
-        QFile::remove(screenshotPreviewPath + QStringLiteral(".tmp.png"));
-
         int autoFlag = 0;
         virDomainGetAutostart(domainPtr, &autoFlag);
 
@@ -1448,7 +1440,6 @@ QVector<Karton::DomainListEntry> Karton::collectDomainList(virConnectPtr conn, b
             .networkName = reader.m_xmlInfo.networkName,
             .secureBoot = reader.m_xmlInfo.secureBoot,
             .hasGraphics = reader.m_xmlInfo.hasGraphics,
-            .screenshotPreviewPath = screenshotPreviewPath,
             .autostart = autoFlag != 0,
         };
         entries.append(entry);
@@ -1555,7 +1546,7 @@ void Karton::applyDomainList(const QVector<DomainListEntry> &entries)
     }
     for (Domain *domain : previousDomains) {
         if (!m_domains.contains(domain)) {
-            removeDomainCache(domain->config()->uuid(), domain->config()->screenshotPreviewPath());
+            removeDomainCache(domain->config()->uuid());
             Q_EMIT domainRemoved(domain);
             domain->deleteLater();
         }
@@ -1573,7 +1564,7 @@ void Karton::applyDomainList(const QVector<DomainListEntry> &entries)
         const QStringList previousKnown = settings.value(knownKey).toStringList();
         for (const QString &uuid : previousKnown) {
             if (!currentUuids.contains(uuid)) {
-                removeDomainCache(uuid, QString());
+                removeDomainCache(uuid);
             }
         }
         QStringList currentKnown = currentUuids.values();
@@ -1625,15 +1616,6 @@ void Karton::refreshDomainListSync()
 
         DomainXmlReader reader(domainPtr);
 
-        QString screenshotPreviewPath = reader.m_xmlInfo.screenshotPreviewPath;
-        if (screenshotPreviewPath.isEmpty()) { // set default path if not found
-            screenshotPreviewPath = QStringLiteral("%1/previews/%2.png").arg(QStandardPaths::writableLocation(QStandardPaths::StateLocation), uuid);
-        }
-        // Previews are memory-only now. Remove screenshots written by older
-        // versions instead of leaving them in the state directory.
-        QFile::remove(screenshotPreviewPath);
-        QFile::remove(screenshotPreviewPath + QStringLiteral(".tmp.png"));
-
         int autoFlag = 0;
         virDomainGetAutostart(domainPtr, &autoFlag);
 
@@ -1683,7 +1665,6 @@ void Karton::refreshDomainListSync()
             .networkName = reader.m_xmlInfo.networkName,
             .secureBoot = reader.m_xmlInfo.secureBoot,
             .hasGraphics = reader.m_xmlInfo.hasGraphics,
-            .screenshotPreviewPath = screenshotPreviewPath,
             .autostart = autoFlag != 0,
         };
 
@@ -1756,7 +1737,7 @@ void Karton::refreshDomainListSync()
     }
     for (Domain *domain : previousDomains) {
         if (!m_domains.contains(domain)) {
-            removeDomainCache(domain->config()->uuid(), domain->config()->screenshotPreviewPath());
+            removeDomainCache(domain->config()->uuid());
             Q_EMIT domainRemoved(domain);
             domain->deleteLater();
         }
@@ -1780,7 +1761,7 @@ void Karton::refreshDomainListSync()
         const QStringList previousKnown = settings.value(knownKey).toStringList();
         for (const QString &uuid : previousKnown) {
             if (!currentUuids.contains(uuid)) {
-                removeDomainCache(uuid, QString());
+                removeDomainCache(uuid);
             }
         }
         QStringList currentKnown = currentUuids.values();
@@ -2783,6 +2764,11 @@ void Karton::applyGuestMemoryStats(const QString &uuid, qulonglong usedKiB, qulo
     }
     m_guestMemory.insert(uuid, {usedKiB, totalKiB});
     Q_EMIT domainStatsUpdated(uuid);
+}
+
+bool Karton::primaryMouseButtonPressed() const
+{
+    return QGuiApplication::mouseButtons().testFlag(Qt::LeftButton);
 }
 
 bool Karton::setAutostart(const Domain *domain, bool autostart)

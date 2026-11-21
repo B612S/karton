@@ -20,6 +20,8 @@ KartonDialog {
     property string errorText: ""
     property var activeNetworks: []
     property var connectionOptions: []
+    property var storagePools: []
+    property bool useStoragePool: false
     property string connectionUri: ""
     readonly property bool remoteTarget: Karton.connectionIsRemote(connectionUri)
 
@@ -49,6 +51,16 @@ KartonDialog {
         networkCombo.currentIndex = 0;
     }
 
+    function refreshPools() {
+        root.storagePools = Karton.storagePools(root.connectionUri, true).filter(pool => {
+            return (pool.type === "dir" || pool.type === "fs" || pool.type === "netfs")
+                && (pool.path || "").length > 0;
+        });
+        if (root.storagePools.length === 0) {
+            root.useStoragePool = false;
+        }
+    }
+
     function refreshConnections() {
         const infos = Karton.connectionInfos();
         connectionOptions = infos.filter(info => info.status === 1);
@@ -58,6 +70,16 @@ KartonDialog {
             connectionUri = connectionOptions[0].uri;
         }
         refreshNetworks();
+        refreshPools();
+    }
+
+    function selectedPoolName() {
+        if (!root.useStoragePool
+            || storagePoolCombo.currentIndex < 0
+            || storagePoolCombo.currentIndex >= root.storagePools.length) {
+            return "";
+        }
+        return root.storagePools[storagePoolCombo.currentIndex].name;
     }
 
     function selectedNetwork() {
@@ -73,7 +95,8 @@ KartonDialog {
                               nameField.text.trim(),
                               destinationField.text.trim(),
                               root.selectedNetwork(),
-                              root.connectionUri)) {
+                              root.connectionUri,
+                              root.selectedPoolName())) {
             root.importing = false;
         }
     }
@@ -84,6 +107,8 @@ KartonDialog {
         sourcePath = "";
         nameField.text = "";
         destinationField.text = Karton.imagesDirectory();
+        useStoragePool = false;
+        refreshPools();
         networkCombo.currentIndex = 0;
         errorText = "";
         importing = false;
@@ -108,6 +133,11 @@ KartonDialog {
         function onErrorOccurred(message) {
             if (root.opened) {
                 root.errorText = message;
+            }
+        }
+        function onStoragePoolsUpdated(uri) {
+            if (root.opened && (root.connectionUri.length === 0 || uri === root.connectionUri)) {
+                root.refreshPools();
             }
         }
     }
@@ -177,6 +207,7 @@ KartonDialog {
                 Controls.TextField {
                     Layout.fillWidth: true
                     readOnly: true
+                    selectByMouse: true
                     text: root.sourcePath
                     placeholderText: qsTr("choose_an_ovf_or_ova_file")
                 }
@@ -200,11 +231,70 @@ KartonDialog {
                 placeholderText: qsTr("name_from_the_ovf")
             }
 
+            Controls.CheckBox {
+                visible: !root.remoteTarget
+                Layout.columnSpan: 2
+                Layout.fillWidth: true
+                text: qsTr("use_a_storage_pool")
+                checked: root.useStoragePool
+                enabled: !root.importing && root.storagePools.length > 0
+                onToggled: root.useStoragePool = checked
+            }
             Controls.Label {
+                visible: !root.remoteTarget && root.storagePools.length === 0
+                Layout.columnSpan: 2
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                opacity: 0.65
+                font.pixelSize: 12
+                text: qsTr("no_usable_storage_pools")
+            }
+
+            Controls.Label {
+                visible: !root.remoteTarget && root.useStoragePool
+                text: qsTr("storage_pool")
+                Layout.fillWidth: true
+            }
+            Controls.ComboBox {
+                id: storagePoolCombo
+                visible: !root.remoteTarget && root.useStoragePool
+                Layout.preferredWidth: 260
+                Layout.maximumWidth: 260
+                enabled: !root.importing
+                model: root.storagePools
+                textRole: "name"
+                Controls.ToolTip.visible: hovered && currentIndex >= 0
+                Controls.ToolTip.text: currentIndex >= 0 && currentIndex < root.storagePools.length
+                    ? root.storagePools[currentIndex].path : ""
+            }
+            Controls.Label {
+                visible: !root.remoteTarget && root.useStoragePool && storagePoolCombo.currentIndex >= 0
+                         && storagePoolCombo.currentIndex < root.storagePools.length
+                         && !root.storagePools[storagePoolCombo.currentIndex].active
+                Layout.columnSpan: 2
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                opacity: 0.65
+                font.pixelSize: 12
+                text: qsTr("storage_pool_inactive_will_be_started")
+            }
+            Controls.Label {
+                visible: !root.remoteTarget && root.useStoragePool
+                Layout.columnSpan: 2
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                opacity: 0.65
+                font.pixelSize: 12
+                text: qsTr("ovf_pool_note")
+            }
+
+            Controls.Label {
+                visible: !root.useStoragePool
                 text: qsTr("destination")
                 Layout.fillWidth: true
             }
             RowLayout {
+                visible: !root.useStoragePool
                 Layout.preferredWidth: 260
                 Layout.maximumWidth: 260
                 spacing: Kirigami.Units.smallSpacing
@@ -213,6 +303,7 @@ KartonDialog {
                     id: destinationField
                     Layout.fillWidth: true
                     readOnly: true
+                    selectByMouse: true
                 }
                 Controls.Button {
                     text: qsTr("choose")
@@ -255,7 +346,9 @@ KartonDialog {
                         ? (Karton.ovfImportProgress >= 0
                             ? qsTr("extracting_1_of_2").arg(root.formatBytes(Karton.ovfImportProcessedBytes)).arg(root.formatBytes(Karton.ovfImportTotalBytes))
                             : qsTr("extracting_the_archive"))
-                        : (Karton.ovfImportPhase === "cancelling" ? qsTr("cancelling_the_import") : qsTr("importing_the_ovf_disks_are_converted_to_qcow2"))
+                        : Karton.ovfImportPhase === "uploading"
+                            ? qsTr("uploading_the_imported_disks_to_the_storage_pool")
+                            : (Karton.ovfImportPhase === "cancelling" ? qsTr("cancelling_the_import") : qsTr("importing_the_ovf_disks_are_converted_to_qcow2"))
                     wrapMode: Text.WordWrap
                 }
                 Controls.ProgressBar {

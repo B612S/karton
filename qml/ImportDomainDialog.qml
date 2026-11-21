@@ -92,6 +92,7 @@ KartonDialog {
                 Controls.TextField {
                     Layout.fillWidth: true
                     readOnly: true
+                    selectByMouse: true
                     text: root.filePath
                     placeholderText: qsTr("domain_xml_file")
                 }

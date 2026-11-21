@@ -23,10 +23,21 @@ ColumnLayout {
 
     function refreshPools() {
         loading = true;
-        pools = Karton.storagePools(root.connectionUri, true);
-        if (pools.length > 0) {
+        const next = Karton.storagePools(root.connectionUri, true);
+        if (next.length > 0) {
+            // Keep the optimistic row state while a fresh scan is in flight.
+            pools = next;
             loading = false;
         }
+    }
+
+    function setPoolActive(index, active) {
+        if (index < 0 || index >= root.pools.length) {
+            return;
+        }
+        const next = root.pools.slice();
+        next[index] = Object.assign({}, next[index], { active: active });
+        root.pools = next;
     }
 
     onConnectionUriChanged: refreshPools()
@@ -71,6 +82,13 @@ ColumnLayout {
         color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
     }
 
+    Kirigami.InlineMessage {
+        Layout.fillWidth: true
+        visible: root.errorText.length > 0
+        type: Kirigami.MessageType.Error
+        text: root.errorText
+    }
+
     ListView {
         Layout.fillWidth: true
         Layout.fillHeight: true
@@ -112,10 +130,15 @@ ColumnLayout {
                     text: modelData.active ? qsTr("stop") : qsTr("start")
                     icon.name: modelData.active ? "media-playback-stop-symbolic" : "media-playback-start-symbolic"
                     onClicked: {
+                        root.errorText = "";
                         if (modelData.active) {
-                            Karton.stopStoragePool(modelData.name, root.connectionUri);
+                            if (Karton.stopStoragePool(modelData.name, root.connectionUri)) {
+                                root.setPoolActive(index, false);
+                            }
                         } else {
-                            Karton.startStoragePool(modelData.name, root.connectionUri);
+                            if (Karton.startStoragePool(modelData.name, root.connectionUri)) {
+                                root.setPoolActive(index, true);
+                            }
                         }
                         root.refreshPools();
                     }
@@ -147,15 +170,6 @@ ColumnLayout {
         font.pixelSize: 12
         text: qsTr("storage_pools_are_shared_by_all_virtual_machines")
     }
-    Controls.Label {
-        visible: root.errorText.length > 0
-        Layout.fillWidth: true
-        wrapMode: Text.WordWrap
-        color: Kirigami.Theme.negativeTextColor
-        font.pixelSize: 12
-        text: root.errorText
-    }
-
     KartonDialog {
         id: poolEditor
         title: qsTr("create_storage_pool")

@@ -114,6 +114,7 @@ KartonDialog {
                     id: destinationField
                     Layout.fillWidth: true
                     readOnly: true
+                    selectByMouse: true
                 }
                 Controls.Button {
                     text: qsTr("choose")

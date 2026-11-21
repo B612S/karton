@@ -659,13 +659,16 @@ Kirigami.Page {
                 Layout.fillWidth: true
 
                 Controls.Label { text: qsTr("uuid"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
-                Controls.Label {
+                Kirigami.SelectableLabel {
+                    clip: true
+                    wrapMode: Text.NoWrap
+                    verticalAlignment: Text.AlignVCenter
+                    color: Kirigami.Theme.textColor
                     text: domain ? domain.config.uuid : ""
                     font.pixelSize: 14
                     Layout.preferredWidth: 280
                     Layout.alignment: Qt.AlignRight
                     horizontalAlignment: Text.AlignRight
-                    elide: Text.ElideRight
                 }
                 Controls.Label { text: qsTr("state"); font.pixelSize: 14; Layout.fillWidth: true; Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter; opacity: 0.8 }
                 Controls.Label {
@@ -738,14 +741,17 @@ Kirigami.Page {
                             Layout.fillWidth: true
                             spacing: 8
 
-                            Controls.Label {
+                            Kirigami.SelectableLabel {
+                                clip: true
+                                wrapMode: Text.NoWrap
+                                verticalAlignment: Text.AlignVCenter
+                                color: Kirigami.Theme.textColor
                                 Layout.fillWidth: true
                                 Layout.alignment: Qt.AlignVCenter
                                 visible: modelData.isCdrom || modelData.source.length > 0
                                 text: modelData.source.length > 0 ? modelData.source : qsTr("no_media")
                                 font.pixelSize: 12
                                 opacity: 0.75
-                                elide: Text.ElideMiddle
                             }
                             Controls.Button {
                                 Layout.alignment: Qt.AlignVCenter

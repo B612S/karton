@@ -24,8 +24,9 @@ with a desktop-oriented viewer.
 
 - List local libvirt domains with their OS icon and human-readable OS name.
 - Search and filter the list by name, OS, UUID or running state.
-- Import a VM from libvirt domain XML or from an OVF/OVA package; export it
-  as domain XML, an OVF folder or an OVA archive.
+- Import a VM from libvirt domain XML or from an OVF/OVA package (into a
+  folder or a storage pool); export it as domain XML, an OVF folder or an OVA
+  archive.
 - Create VMs from an ISO or disk image.
 - Start, shut down, power off, pause, resume, reboot and reset.
 - Autostart on boot.
@@ -47,7 +48,7 @@ with a desktop-oriented viewer.
 - Live VM previews on the VM page.
 - Per-VM fixed display resolution, including custom resolutions.
 - Optional guest resolution auto-fit while the VM is running.
-- Separate per-VM sound output and microphone controls.
+- Separate per-VM sound output and sound input controls.
 - Runtime USB and PCI passthrough from the viewer.
 - Opening the same VM twice focuses the existing viewer instead of creating a
   duplicate.
@@ -77,7 +78,10 @@ VM pages include:
 - Domain XML editor
 
 The XML editor is read-only by default, has an explicit Edit switch, syntax
-highlighting and scrolls independently of the page.
+highlighting and scrolls independently of the page. Long lines wrap visually
+without changing the XML text. Its header contains an inline XML search field
+with a match counter: Ctrl+F focuses it, Enter/Shift+Enter jump between matches
+and Esc clears it.
 
 **Add…** opens a grouped Add Hardware dialog for:
 
@@ -129,7 +133,17 @@ Global Application Settings provide:
 - SPICE TLS: prefer TLS when the VM exposes a TLS port, and the CA certificate path;
 - shared libvirt networks (start/stop, autostart, create NAT, delete);
 - DHCP leases and static reservations for libvirt networks;
+- the default VM image folder and per-connection storage pools;
+- XML editor font, font size and color-scheme presets;
+- a Maintenance page that cleans stale data for deleted VMs;
 - About information.
+
+"Start on boot" marks the VM for libvirt autostart and also enables autostart
+for the VM's networks and storage pools. On a system connection, enable the
+libvirt service at boot once (for example
+`sudo systemctl enable --now libvirtd.service` or the matching
+`virtqemud.service`); Karton shows this command in the VM settings when the
+service is not enabled yet.
 
 ## Guest tools
 

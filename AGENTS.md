@@ -365,15 +365,16 @@ Karton style; do not invent a separate layout for a new screen.
 - `ApplicationSettingsDialog.qml` is the window-attached Luma-style global
   settings overlay. Its Application page selects the UI language and the SPICE
   defaults; its Console page sets the default serial-console font size; its
+  Editor page selects the XML editor font, font size and color-scheme preset
+  (`editor/fontSize`, `editor/fontFamily`, `editor/theme`); its
   Connections page lists the primary and additional libvirt connections
   (edit/remove additional addresses, add new ones); its About page shows the
   application version and links. Host libvirt networks are per connection and
-  live in `ConnectionSettingsDialog`, not in Application Settings. The Application page also
-  selects the UI language (System/English/Русский) and has a Maintenance section
-  that can clear all preview images. Data for deleted VMs
-  is cleaned automatically: runtime removals call `removeDomainCache()`, and a
-  per-connection `knownDomains/<hash>` UUID list cleans VMs deleted while
-  Karton was closed without affecting other libvirt connections.
+  live in `ConnectionSettingsDialog`, not in Application Settings. Its
+  Maintenance page can run the stale-data cleanup for deleted VMs. Data for deleted VMs is cleaned automatically: runtime
+  removals call `removeDomainCache()`, and a per-connection
+  `knownDomains/<hash>` UUID list cleans VMs deleted while Karton was closed
+  without affecting other libvirt connections.
 - Libvirt network management lives on `Karton` (`networks(uri)`,
   `startNetwork(name, uri)`, `stopNetwork()`, `createNatNetwork()`,
   `attachNetwork()`, `detachNetwork()`). Host networks are per libvirt
@@ -440,7 +441,10 @@ Karton style; do not invent a separate layout for a new screen.
   disk image is not readable
   by Karton — a running system VM's image can still be owned by libvirt-qemu —
   and reports the exact image instead of qemu-img's duplicated error. Import
-  always defines the VM stopped. OVA extraction runs on `QThreadPool`
+  always defines the VM stopped. Import can also target a file-backed storage
+  pool (`dir`, `fs`, `netfs`): Karton creates a qcow2 volume through libvirt,
+  converts each disk to a temporary local qcow2 and streams it into the volume,
+  so system pools that are not writable by the user work too. OVA extraction runs on `QThreadPool`
   (`app/ovfextract.*`) and polls an atomic cancel flag, so a multi-gigabyte
   archive never blocks the GUI and can be stopped; parsing, disk conversion and
   the domain definition stay on the GUI thread. `tar --checkpoint-action=echo=%T`
@@ -486,10 +490,10 @@ Karton style; do not invent a separate layout for a new screen.
   call is ever needed, pass `-c <the same URI>` to match the application's
   active connection.
 - Karton stores its own data inside domain XML metadata:
-  `<karton:data maxDiskStorage="…"/>`. `maxDiskStorage` is stored in MiB. Older
-  domains may also carry a legacy `screenshotPreviewPath`; new domains do not
-  write it, and the referenced files are cleaned up because previews are
-  memory-only. `DomainXmlReader` gets the XML from libvirt
+  `<karton:data maxDiskStorage="…"/>`. `maxDiskStorage` is stored in MiB.
+  Unknown metadata attributes are preserved by `updateXML()` but ignored by
+  Karton. Preview frames are memory-only and Karton never writes preview files.
+  `DomainXmlReader` gets the XML from libvirt
   (`virDomainGetXMLDesc()`) rather than reading the config file on disk.
   Preserve unknown metadata when rewriting XML —
   `DomainXmlBuilder::updateXML()` intentionally edits only specific fields.
@@ -558,6 +562,10 @@ Karton style; do not invent a separate layout for a new screen.
   next configuration save.
 - Autostart is toggled from the General configuration tab through
   `Karton::setAutostart()`; it is also read back into `DomainConfig::autostart`.
+  `Karton::prepareAutostart()` additionally enables autostart on the storage
+  pools and libvirt networks used by the VM, and `autostartProblems()` reports
+  the remaining prerequisites (the libvirt systemd service for system
+  connections, or the login-time limitation of session connections).
 - Pause/resume/reboot are `Karton::pauseDomain()`, `resumeDomain()` and
   `rebootDomain()`. `Domain::isPaused` mirrors `VIR_DOMAIN_PAUSED`; never infer
   paused state from the localized `DomainConfig::state` string.
@@ -713,7 +721,13 @@ Karton style; do not invent a separate layout for a new screen.
   with detach actions for non-system devices. All pages are refreshed after XML
   edits or device hotplug. The XML page is read-only by default with
   an Edit switch; it uses `XmlHighlighter` for theme-coloured XML syntax
-  highlighting, preserves its scroll position when toggling Edit, and saves
+  highlighting, does not accept mouse drags so selecting text does not pan the
+  XML (the wheel and scrollbar still scroll, and dragging a selection
+  auto-scrolls in steps; long lines wrap visually without altering the saved
+  XML), has an inline find field in the page header
+  (Ctrl+F focuses it, Enter/Shift+Enter move between matches, Esc clears it,
+  with a match counter), preserves its scroll position when toggling Edit, and
+  saves
   through `saveDomainXml()`, which validates the complete document against
   libvirt's domain schema (`VIR_DOMAIN_DEFINE_VALIDATE`). Invalid or unsupported
   XML is rejected, reported, and the editor reverts to the last valid version.
@@ -774,9 +788,7 @@ Karton style; do not invent a separate layout for a new screen.
   open, because destroying a QQuickWindow at runtime leaves QQC2/Breeze style
   timers pointing at freed objects. `PreviewItem` paints the
   in-memory `QImage` directly, so the QML never reloads an image and the
-  preview does not blink. A stopped VM shows no preview, and the legacy
-  `screenshotPreviewPath` metadata plus any old PNG files are ignored and
-  removed when domains are listed.
+  preview does not blink. A stopped VM shows no preview.
 - SPICE cursor shapes are installed as the actual host cursor by
   `DomainViewer::applyGuestCursor()`; no scene-graph cursor overlay is painted.
   There is one display node per renderer and one root node that owns it. Client

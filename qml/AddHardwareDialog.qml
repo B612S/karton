@@ -662,6 +662,7 @@ KartonDialog {
                                             id: addDiskFolderField
                                             Layout.fillWidth: true
                                             readOnly: true
+                                            selectByMouse: true
                                             placeholderText: Karton.imagesDirectory()
                                         }
                                         Controls.Button {

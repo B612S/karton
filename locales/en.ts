@@ -80,7 +80,6 @@
 <message><source>remote_image_path_note</source><translation>Remote connection: enter the path of an existing image or ISO on the remote host.</translation></message>
 <message><source>remote_no_storage_pools_note</source><translation>No active storage pools on the remote host. Create a pool in the host libvirt, or switch to "Existing image" and enter a path.</translation></message>
 <message><source>remote_advanced_options_note</source><translation>Bus, cache, discard, serial and shareable options are not applied to remote disks yet.</translation></message>
-<message><source>failed_to_create_the_disk_on_the_remote_host</source><translation>Failed to create the disk on the remote host.</translation></message>
 <message><source>storage_pool</source><translation>Storage pool</translation></message>
 <message><source>volume_name</source><translation>Volume name</translation></message>
 <message><source>select_a_storage_pool</source><translation>Select a storage pool.</translation></message>
@@ -111,14 +110,11 @@
 <message><source>choose</source><translation>Choose…</translation></message>
 <message><source>choose_a_ca_certificate</source><translation>Choose a CA certificate</translation></message>
 <message><source>choose_vm_image_folder</source><translation>Choose VM image folder</translation></message>
-<message><source>clear</source><translation>Clear</translation></message>
-<message><source>clear_preview_images</source><translation>Clear preview images</translation></message>
 <message><source>connection_uri</source><translation>Connection URI</translation></message>
 <message><source>console</source><translation>Console</translation></message>
 <message><source>create</source><translation>Create</translation></message>
 <message><source>create_network</source><translation>Create Network</translation></message>
 <message><source>custom</source><translation>Custom</translation></message>
-<message><source>data_for_deleted_vms_previews_and_per_vm_window_audio_display_and_console_settings_is_remo</source><translation>Data for deleted VMs (previews and per-VM window, audio, display and console settings) is removed automatically for the active libvirt connection.</translation></message>
 <message><source>delete</source><translation>Delete</translation></message>
 <message><source>dhcpv4_range</source><translation>DHCPv4 range</translation></message>
 <message><source>dhcpv6_range</source><translation>DHCPv6 range</translation></message>
@@ -147,8 +143,6 @@
 <message><source>isolated</source><translation>Isolated</translation></message>
 <message><source>karton</source><translation>Karton</translation></message>
 <message><source>language_auto</source><translation>System</translation></message>
-<message><source>libvirt_networks</source><translation>Libvirt Networks</translation></message>
-<message><source>libvirt_uri</source><translation>Libvirt URI</translation></message>
 <message><source>maintenance</source><translation>Maintenance</translation></message>
 <message><source>mode</source><translation>Mode</translation></message>
 <message><source>name</source><translation>Name</translation></message>
@@ -159,7 +153,6 @@
 <message><source>new_vm_disks_are_created_in_this_folder_by_default_default_1</source><translation>New VM disks are created in this folder by default. Default: %1</translation></message>
 <message><source>open</source><translation>Open</translation></message>
 <message><source>path_to_the_ca_certificate</source><translation>Path to the CA certificate</translation></message>
-<message><source>removed_1_preview_images</source><translation>Removed %1 preview images</translation></message>
 <message><source>restart_karton_to_apply_the_new_connection</source><translation>Restart Karton to apply the new connection.</translation></message>
 <message><source>restore_default_folder</source><translation>Restore default folder</translation></message>
 <message><source>routed</source><translation>Routed</translation></message>
@@ -189,12 +182,22 @@
 <message><source>add_connection</source><translation>Add connection</translation></message>
 <message><source>remove</source><translation>Remove</translation></message>
 <message><source>additional_connections_are_applied_immediately</source><translation>Additional connections are applied immediately. The default connection is used after restarting Karton.</translation></message>
-<message><source>edit</source><translation>Edit</translation></message>
 <message><source>edit_connection</source><translation>Edit connection</translation></message>
 <message><source>connection_uri_applied_immediately</source><translation>The new address is used immediately.</translation></message>
 <message><source>connection_uri_already_used</source><translation>This connection is already in the list.</translation></message>
 <message><source>no_connections</source><translation>No connections configured.</translation></message>
 <message><source>connection</source><translation>Connection</translation></message>
+<message><source>cached_data</source><translation>Cached data</translation></message>
+<message><source>deleted_vm_data</source><translation>Deleted VM data</translation></message>
+<message><source>clean_up_now</source><translation>Clean up now</translation></message>
+<message><source>removed_1_entries</source><translation>Removed %1 entries.</translation></message>
+<message><source>deleted_vm_settings_are_removed_automatically</source><translation>Window, audio, display and console settings of deleted VMs are removed automatically for this libvirt connection.</translation></message>
+<message><source>editor</source><translation>Editor</translation></message>
+<message><source>xml_editor</source><translation>XML editor</translation></message>
+<message><source>font_family</source><translation>Font</translation></message>
+<message><source>xml_editor_font_note</source><translation>Used by the Domain XML editor. Changes apply immediately.</translation></message>
+<message><source>color_scheme</source><translation>Color scheme</translation></message>
+<message><source>xml_editor_theme_note</source><translation>Only the XML editor uses this color scheme.</translation></message>
 </context>
 <context>
 <name>BusyOperationDialog</name>
@@ -335,10 +338,8 @@
 <message><source>cannot_edit_configuration_while_domain_is_running_1</source><translation>Cannot edit configuration while domain is running: %1</translation></message>
 <message><source>cannot_grant_access_to_1_because_it_is_owned_by_another_user</source><translation>Cannot grant access to %1 because it is owned by another user.</translation></message>
 <message><source>cd_rom_1_was_not_found</source><translation>CD-ROM %1 was not found.</translation></message>
-<message><source>choose_a_dedicated_folder_for_vm_images_not_a_system_home_or_sensitive_directory</source><translation>Choose a dedicated folder for VM images, not a system, home or sensitive directory.</translation></message>
 <message><source>could_not_find_a_free_192_168_x_0_24_subnet_for_the_new_network</source><translation>Could not find a free 192.168.x.0/24 subnet for the new network.</translation></message>
 <message><source>could_not_find_the_libvirt_qemu_user</source><translation>Could not find the libvirt QEMU user.</translation></message>
-<message><source>could_not_find_the_libvirt_qemu_user_grant_access_manually</source><translation>Could not find the libvirt QEMU user. Grant access manually.</translation></message>
 <message><source>could_not_parse_the_source_vm_configuration</source><translation>Could not parse the source VM configuration.</translation></message>
 <message><source>could_not_parse_the_vm_configuration_for_the_snapshot</source><translation>Could not parse the VM configuration for the snapshot.</translation></message>
 <message><source>could_not_read_the_source_vm_configuration_1</source><translation>Could not read the source VM configuration: %1</translation></message>
@@ -371,7 +372,6 @@
 <message><source>failed_to_define_network_1_2</source><translation>Failed to define network %1: %2</translation></message>
 <message><source>failed_to_delete_disk_file_1</source><translation>Failed to delete disk file: %1</translation></message>
 <message><source>failed_to_delete_network_1_2</source><translation>Failed to delete network %1: %2</translation></message>
-<message><source>failed_to_delete_preview_image_1</source><translation>Failed to delete preview image: %1</translation></message>
 <message><source>failed_to_delete_snapshot_1_2</source><translation>Failed to delete snapshot %1: %2</translation></message>
 <message><source>failed_to_delete_the_saved_state_of_domain_1_2</source><translation>Failed to delete the saved state of domain %1: %2</translation></message>
 <message><source>failed_to_detach_disk_1_2</source><translation>Failed to detach disk %1: %2</translation></message>
@@ -396,7 +396,6 @@
 <message><source>failed_to_read_configuration_for_domain_1_2</source><translation>Failed to read configuration for domain %1: %2</translation></message>
 <message><source>failed_to_read_the_configuration_of_network_1</source><translation>Failed to read the configuration of network %1.</translation></message>
 <message><source>failed_to_reboot_domain_1_2</source><translation>Failed to reboot domain %1: %2</translation></message>
-<message><source>failed_to_remove_access_from_1</source><translation>Failed to remove access from: %1</translation></message>
 <message><source>failed_to_remove_device_1</source><translation>Failed to remove device: %1</translation></message>
 <message><source>failed_to_remove_input_device_1_2</source><translation>Failed to remove input device %1: %2</translation></message>
 <message><source>failed_to_remove_persisted_usb_device_1_2</source><translation>Failed to remove persisted USB device %1: %2</translation></message>
@@ -433,8 +432,6 @@
 <message><source>iso_image_does_not_exist_1</source><translation>ISO image does not exist: %1</translation></message>
 <message><source>karton_has_no_write_access_to_the_disk_folder_1</source><translation>Karton has no write access to the disk folder: %1</translation></message>
 <message><source>keyboard</source><translation>Keyboard</translation></message>
-<message><source>libvirt_qemu_user_cannot_read_write_1_grant_that_user_access_to_the_folder</source><translation>libvirt QEMU user cannot read/write %1. Grant that user access to the folder.</translation></message>
-<message><source>libvirt_qemu_user_cannot_traverse_1_grant_that_user_execute_permission_on_the_directory</source><translation>libvirt QEMU user cannot traverse %1. Grant that user execute permission on the directory.</translation></message>
 <message><source>libvirt_still_cannot_access_1_after_granting_permissions</source><translation>libvirt still cannot access %1 after granting permissions.</translation></message>
 <message><source>memory_balloon</source><translation>Memory Balloon</translation></message>
 <message><source>mouse</source><translation>Mouse</translation></message>
@@ -519,9 +516,7 @@
 <message><source>vsock</source><translation>VSOCK</translation></message>
 <message><source>watchdog</source><translation>Watchdog</translation></message>
 
-<message><source>could_not_start_the_windows_driver_installer_1</source><translation>Could not start the Windows driver installer: %1</translation></message>
 
-<message><source>the_vm_has_no_cd_rom_drive_add_one_while_it_is_stopped</source><translation>This VM has no CD-ROM drive.</translation></message>
 
 <message><source>stop_the_vm_before_compacting_its_disk</source><translation>Stop the VM before compacting its disk.</translation></message>
 <message><source>failed_to_read_disk_image_information_1</source><translation>Failed to read disk image information: %1</translation></message>
@@ -591,6 +586,9 @@
 <message><source>ovf_export_from_a_remote_connection_is_not_supported</source><translation>OVF export from a remote connection is not supported yet.</translation></message>
 <message><source>usb_passthrough_to_a_remote_vm_is_not_supported</source><translation>USB passthrough to a remote VM is not supported yet.</translation></message>
 <message><source>pci_passthrough_to_a_remote_vm_is_not_supported</source><translation>PCI passthrough to a remote VM is not supported yet.</translation></message>
+<message><source>storage_volume_1_was_not_found</source><translation>Storage volume %1 was not found.</translation></message>
+<message><source>storage_pool_1_does_not_support_ovf_import</source><translation>Storage pool %1 cannot store imported qcow2 images. Use a directory, filesystem or network filesystem pool.</translation></message>
+<message><source>system_theme</source><translation>System theme</translation></message>
 </context>
 <context>
 <name>Main</name>
@@ -637,7 +635,6 @@
 <message><source>clipboard_synchronization_between_this_computer_and_the_guest</source><translation>Clipboard synchronization between this computer and the guest.</translation></message>
 <message><source>close</source><translation>Close</translation></message>
 <message><source>controllers</source><translation>Controllers</translation></message>
-<message><source>cpu_usage</source><translation>CPU Usage</translation></message>
 <message><source>cpus</source><translation>CPUs</translation></message>
 <message><source>cpus_memory</source><translation>CPUs &amp; Memory</translation></message>
 <message><source>custom</source><translation>Custom…</translation></message>
@@ -655,7 +652,6 @@
 <message><source>disks</source><translation>Disks</translation></message>
 <message><source>disks_and_cd_roms</source><translation>Disks and CD-ROMs</translation></message>
 <message><source>display</source><translation>Display</translation></message>
-<message><source>domain_xml</source><translation>Domain XML</translation></message>
 <message><source>driver</source><translation>Driver</translation></message>
 <message><source>edit</source><translation>Edit</translation></message>
 <message><source>edit_filesystem_share</source><translation>Edit Filesystem Share</translation></message>
@@ -684,8 +680,6 @@
 <message><source>macos_and_bsd_variants_need_a_guest_driver_for_the_selected_filesystem_type_9p_support_dep</source><translation>macOS and BSD variants need a guest driver for the selected filesystem type; 9p support depends on the guest kernel.</translation></message>
 <message><source>media</source><translation>Media</translation></message>
 <message><source>memory_gb</source><translation>Memory (GB)</translation></message>
-<message><source>memory_usage</source><translation>Memory Usage</translation></message>
-<message><source>microphone</source><translation>Microphone</translation></message>
 <message><source>model</source><translation>Model</translation></message>
 <message><source>mounting_filesystem_shares</source><translation>Mounting Filesystem Shares</translation></message>
 <message><source>name</source><translation>Name</translation></message>
@@ -702,17 +696,13 @@
 <message><source>panic_notifier</source><translation>Panic notifier</translation></message>
 <message><source>path</source><translation>Path</translation></message>
 <message><source>pci</source><translation>PCI</translation></message>
-<message><source>performance</source><translation>Performance</translation></message>
 <message><source>persistent_usb_devices</source><translation>Persistent USB devices</translation></message>
 <message><source>random_number_generator</source><translation>Random Number Generator</translation></message>
 <message><source>read_only</source><translation>read-only</translation></message>
 <message><source>read_only_2</source><translation>Read-only</translation></message>
 <message><source>read_only_by_default_enable_editing_only_when_you_need_to_change_the_domain_xml_directly</source><translation>Read-only by default. Enable editing only when you need to change the domain XML directly.</translation></message>
 <message><source>resolution</source><translation>Resolution</translation></message>
-<message><source>s_1</source><translation>%1 %</translation></message>
 <message><source>s_1_mib</source><translation>%1 MiB</translation></message>
-<message><source>s_1_mib_allocated</source><translation>%1 MiB allocated</translation></message>
-<message><source>s_1_mib_of_2_mib_used</source><translation>%1 MiB of %2 MiB used</translation></message>
 <message><source>s_3d_acceleration</source><translation>3D acceleration</translation></message>
 <message><source>s_9p_is_not_supported_natively_for_virtiofs_install_the_virtio_fs_driver_from_virtio_win_a</source><translation>9p is not supported natively. For virtiofs, install the VirtIO FS driver from virtio-win and WinFsp, then use the shared tag in the VirtIO FS client. Alternatively use a Windows/SMB share.</translation></message>
 <message><source>save</source><translation>Save</translation></message>
@@ -727,7 +717,6 @@
 <message><source>shared_folders_are_added_from_add_hardware_each_share_is_mounted_in_the_guest_under_its_mo</source><translation>Shared folders are added from Add Hardware. Each share is mounted in the guest under its mount tag.</translation></message>
 <message><source>shared_memory_backing_virtiofs</source><translation>Shared memory backing (virtiofs)</translation></message>
 <message><source>shared_memory_device_ivshmem</source><translation>Shared memory device (IVSHMEM)</translation></message>
-<message><source>short_os_id</source><translation>Short OS ID</translation></message>
 <message><source>size_mib</source><translation>Size (MiB)</translation></message>
 <message><source>sound</source><translation>Sound</translation></message>
 <message><source>sound_model</source><translation>Sound model</translation></message>
@@ -747,7 +736,6 @@
 <message><source>use_application_default</source><translation>Use application default</translation></message>
 <message><source>use_the_mount_tag_from_the_filesystem_page_as_the_name_of_the_share</source><translation>Use the mount tag from the Filesystem page as the name of the share.</translation></message>
 <message><source>uuid</source><translation>UUID</translation></message>
-<message><source>vcpus</source><translation>vCPUs</translation></message>
 <message><source>video_memory_mib</source><translation>Video memory (MiB)</translation></message>
 <message><source>video_model</source><translation>Video model</translation></message>
 <message><source>virtio_vsock</source><translation>VirtIO VSOCK</translation></message>
@@ -785,6 +773,19 @@
 <message><source>port_forwarding_is_tcp_only_use_ports_above_1024</source><translation>TCP only. Ports below 1024 usually require root privileges.</translation></message>
 <message><source>remove</source><translation>Remove</translation></message>
 <message><source>from_pool</source><translation>From pool…</translation></message>
+<message><source>sound_input</source><translation>Sound input</translation></message>
+<message><source>start_on_boot_requires_the_1_service_to_be_enabled_run_sudo_systemctl_enable_now_1</source><translation>Start on boot requires the libvirt service %1 to be enabled: sudo systemctl enable --now %1</translation></message>
+<message><source>session_vms_start_when_you_log_in_not_at_system_boot</source><translation>Session VMs start when you log in, not at system boot.</translation></message>
+<message><source>could_not_enable_autostart_for_network_1</source><translation>Could not enable autostart for the network %1.</translation></message>
+<message><source>could_not_enable_autostart_for_storage_pool_1</source><translation>Could not enable autostart for the storage pool %1.</translation></message>
+<message><source>sound_model_ich9</source><translation>ICH9</translation></message>
+<message><source>sound_model_ac97</source><translation>AC97</translation></message>
+<message><source>could_not_enable_autostart_for_all_networks_and_storage_pools</source><translation>Could not enable autostart for all networks and storage pools used by this VM.</translation></message>
+<message><source>find_in_xml</source><translation>Find in XML</translation></message>
+<message><source>no_matches</source><translation>No matches</translation></message>
+<message><source>match_1_of_2</source><translation>%1 of %2</translation></message>
+<message><source>previous_match</source><translation>Previous match</translation></message>
+<message><source>next_match</source><translation>Next match</translation></message>
 </context>
 <context>
 <name>SnapshotsDialog</name>
@@ -823,7 +824,6 @@
 <name>VMListPage</name>
 <message><source>domain_xml</source><translation>Domain XML…</translation></message>
 <message><source>ovf_ova</source><translation>OVF/OVA…</translation></message>
-<message><source>import_domain_xml</source><translation>Import domain XML…</translation></message>
 <message><source>import_ovf_ova</source><translation>Import OVF/OVA</translation></message>
 <message><source>all_files</source><translation>All files (*)</translation></message>
 <message><source>import</source><translation>Import</translation></message>
@@ -831,22 +831,12 @@
 <message><source>imported_vm_1</source><translation>Imported VM: %1</translation></message>
 <message><source>libvirt_domain_xml</source><translation>Libvirt domain XML (*.xml)</translation></message>
 <message><source>all</source><translation>All</translation></message>
-<message><source>cannot_connect_to_libvirt</source><translation>Cannot connect to libvirt</translation></message>
-<message><source>check_that_libvirt_is_running_and_that_the_1_connection_is_available</source><translation>Check that libvirt is running and that the %1 connection is available.</translation></message>
-<message><source>connecting_to_1</source><translation>Connecting to %1…</translation></message>
-<message><source>connecting_to_1_explanation</source><translation>Karton is opening the libvirt connection. This can take a few seconds on a busy host.</translation></message>
-<message><source>reconnecting_to_1</source><translation>Reconnecting to %1…</translation></message>
-<message><source>reconnecting_to_1_explanation</source><translation>The libvirt connection is unavailable. Karton retries every few seconds.</translation></message>
 <message><source>create</source><translation>Create</translation></message>
 <message><source>filter_by_state</source><translation>Filter by state</translation></message>
-<message><source>no_matching_vms</source><translation>No matching virtual machines</translation></message>
-<message><source>no_virtual_machines</source><translation>No virtual machines</translation></message>
-<message><source>create_or_import_a_virtual_machine_to_get_started</source><translation>Create a new virtual machine or import one to get started.</translation></message>
 <message><source>running</source><translation>Running</translation></message>
 <message><source>search_virtual_machines</source><translation>Search virtual machines</translation></message>
 <message><source>settings</source><translation>Settings</translation></message>
 <message><source>stopped</source><translation>Stopped</translation></message>
-<message><source>try_a_different_search_or_filter</source><translation>Try a different search or filter.</translation></message>
 <message><source>virtual_machines</source><translation>Virtual Machines</translation></message>
 <message><source>vm_count</source><translation>%1 VMs</translation></message>
 <message><source>reconnect</source><translation>Reconnect</translation></message>
@@ -882,24 +872,16 @@
 <message><source>cpu_usage</source><translation>CPU Usage</translation></message>
 <message><source>cpus</source><translation>CPUs</translation></message>
 <message><source>delete</source><translation>Delete</translation></message>
-<message><source>delete_1</source><translation>Delete &#x27;%1&#x27;?</translation></message>
 <message><source>delete_disk</source><translation>Delete Disk</translation></message>
 <message><source>delete_hibernation</source><translation>Delete Hibernation</translation></message>
-<message><source>delete_vm_confirmation</source><translation>You are about to remove the virtual machine, &#x27;%1&#x27;.
-Would you like to remove the disk image as well?
-This action cannot be undone.</translation></message>
 <message><source>deleted_hibernation_for_vm_1</source><translation>Deleted hibernation for VM: %1</translation></message>
 <message><source>deleted_vm_1</source><translation>Deleted VM: %1</translation></message>
 <message><source>details</source><translation>Details</translation></message>
 <message><source>eject</source><translation>Eject</translation></message>
 <message><source>hibernate</source><translation>Hibernate</translation></message>
-<message><source>hibernating_vm_1</source><translation>Hibernating VM: %1</translation></message>
 <message><source>iso_disk_ejected_for_vm_1</source><translation>ISO Disk ejected for VM: %1</translation></message>
-<message><source>iso_disk_path</source><translation>ISO Disk Path</translation></message>
-<message><source>keep_file</source><translation>Keep File</translation></message>
 <message><source>maximum_memory_gb</source><translation>Maximum Memory (GB)</translation></message>
 <message><source>memory</source><translation>Memory</translation></message>
-<message><source>memory_usage</source><translation>Memory Usage</translation></message>
 <message><source>more</source><translation>More</translation></message>
 <message><source>network</source><translation>Network</translation></message>
 <message><source>no_network_interfaces</source><translation>No network interfaces</translation></message>
@@ -910,8 +892,6 @@ This action cannot be undone.</translation></message>
 <message><source>reset</source><translation>Reset</translation></message>
 <message><source>resume</source><translation>Resume</translation></message>
 <message><source>s_1</source><translation>%1 %</translation></message>
-<message><source>s_1_mib_allocated</source><translation>%1 MiB allocated</translation></message>
-<message><source>s_1_mib_of_2_mib_used</source><translation>%1 MiB of %2 MiB used</translation></message>
 <message><source>settings</source><translation>Settings</translation></message>
 <message><source>shut_down</source><translation>Shut Down</translation></message>
 <message><source>snapshots</source><translation>Snapshots</translation></message>
@@ -919,7 +899,6 @@ This action cannot be undone.</translation></message>
 <message><source>state</source><translation>State</translation></message>
 <message><source>storage</source><translation>Storage</translation></message>
 <message><source>uuid</source><translation>UUID</translation></message>
-<message><source>virtual_disk_path</source><translation>Virtual Disk Path</translation></message>
 <message><source>all_files</source><translation>All files (*)</translation></message>
 <message><source>cdrom</source><translation>CD-ROM</translation></message>
 <message><source>change</source><translation>Change…</translation></message>
@@ -948,7 +927,6 @@ This action cannot be undone.</translation></message>
 <message><source>fullscreen</source><translation>Fullscreen</translation></message>
 <message><source>guest_agent_is_not_connected_automatic_resize_requires_spice_vdagent_in_the_guest</source><translation>Guest agent is not connected. Automatic resize requires spice-vdagent in the guest.</translation></message>
 <message><source>hibernate</source><translation>Hibernate</translation></message>
-<message><source>hibernating_vm_1</source><translation>Hibernating VM: %1</translation></message>
 <message><source>machine</source><translation>Machine</translation></message>
 <message><source>minimize</source><translation>Minimize</translation></message>
 <message><source>more</source><translation>More</translation></message>
@@ -981,7 +959,6 @@ This action cannot be undone.</translation></message>
 <message><source>close</source><translation>Close</translation></message>
 <message><source>dhcp</source><translation>DHCP</translation></message>
 <message><source>dhcp_1</source><translation>DHCP — %1</translation></message>
-<message><source>hostname_optional</source><translation>Hostname (optional)</translation></message>
 <message><source>ip_address</source><translation>IP address</translation></message>
 <message><source>mac_address</source><translation>MAC address</translation></message>
 <message><source>no_active_leases</source><translation>No active leases.</translation></message>
@@ -998,7 +975,6 @@ This action cannot be undone.</translation></message>
 <message><source>all_connected_interfaces_already_have_a_reservation</source><translation>All interfaces connected to this network already have a reservation.</translation></message>
 <message><source>no_ipv4_configuration_for_this_network</source><translation>This network has no IPv4 configuration, so reservations are unavailable.</translation></message>
 <message><source>expires</source><translation>Expires</translation></message>
-<message><source>hostname</source><translation>Hostname</translation></message>
 <message><source>select_a_reservation_to_remove_it</source><translation>Select reservations to remove them (Ctrl+click for several).</translation></message>
 <message><source>remove_reservation</source><translation>Remove reservation</translation></message>
 <message><source>remove_reservations</source><translation>Remove reservations</translation></message>
@@ -1030,6 +1006,12 @@ This action cannot be undone.</translation></message>
 <message><source>source</source><translation>Source</translation></message>
 <message><source>the_vm_is_created_stopped_and_can_be_started_from_the_list</source><translation>The VM is created stopped and can be started from the list.</translation></message>
 <message><source>ovf_import_to_a_remote_connection_is_not_supported</source><translation>OVF import to a remote connection is not supported yet.</translation></message>
+<message><source>use_a_storage_pool</source><translation>Use a storage pool</translation></message>
+<message><source>no_usable_storage_pools</source><translation>No storage pool can store imported disks. Create a directory, filesystem or network filesystem pool in the connection settings.</translation></message>
+<message><source>storage_pool</source><translation>Storage pool</translation></message>
+<message><source>storage_pool_inactive_will_be_started</source><translation>This pool is inactive and will be started automatically.</translation></message>
+<message><source>ovf_pool_note</source><translation>Disks are imported as qcow2 volumes into the selected storage pool.</translation></message>
+<message><source>uploading_the_imported_disks_to_the_storage_pool</source><translation>Uploading the imported disks to the storage pool…</translation></message>
 </context>
 <context>
 <name>OvfExportDialog</name>

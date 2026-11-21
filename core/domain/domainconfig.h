@@ -35,7 +35,6 @@ class DomainConfig : public QObject
     Q_PROPERTY(QString networkModel READ networkModel CONSTANT)
     Q_PROPERTY(bool secureBoot READ secureBoot CONSTANT)
     Q_PROPERTY(bool hasGraphics READ hasGraphics NOTIFY hasGraphicsChanged)
-    Q_PROPERTY(QString screenshotPreviewPath READ screenshotPreviewPath NOTIFY pathsChanged)
     Q_PROPERTY(bool autostart READ autostart NOTIFY autostartChanged)
     Q_PROPERTY(bool enableAccel3d READ enableAccel3d CONSTANT)
 
@@ -79,7 +78,6 @@ public:
         QString networkName;
         bool secureBoot = false;
         bool hasGraphics = false;
-        QString screenshotPreviewPath;
         bool autostart = false;
         bool enableAccel3d = true;
     };
@@ -189,10 +187,6 @@ public:
     {
         return m_hasGraphics;
     }
-    [[nodiscard]] QString screenshotPreviewPath() const
-    {
-        return m_screenshotPreviewPath;
-    }
     [[nodiscard]] bool autostart() const
     {
         return m_autostart;
@@ -213,11 +207,7 @@ public:
     void setMaxRam(int maxRam);
     void setCpus(int cpus);
     void setMaxDiskStorage(int maxDiskStorage);
-    void setPaths(const QString &xmlConfigPath,
-                  const QString &isoDiskPath,
-                  const QString &virtualDiskPath,
-                  const QStringList &virtualDiskPaths,
-                  const QString &screenshotPreviewPath);
+    void setPaths(const QString &xmlConfigPath, const QString &isoDiskPath, const QString &virtualDiskPath, const QStringList &virtualDiskPaths);
 
 private:
     QString m_hypervisorType;
@@ -244,7 +234,6 @@ private:
     QString m_networkName;
     bool m_secureBoot = false;
     bool m_hasGraphics = false;
-    QString m_screenshotPreviewPath;
     bool m_autostart = false;
     bool m_enableAccel3d = true;
 };

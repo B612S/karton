@@ -63,7 +63,6 @@ void DomainConfigTest::constructorCopiesEveryField()
     data.networkModel = QStringLiteral("e1000");
     data.secureBoot = true;
     data.hasGraphics = true;
-    data.screenshotPreviewPath = QStringLiteral("/tmp/preview.png");
     data.autostart = true;
     data.enableAccel3d = false;
 
@@ -91,7 +90,6 @@ void DomainConfigTest::constructorCopiesEveryField()
     QCOMPARE(config.networkModel(), data.networkModel);
     QCOMPARE(config.secureBoot(), data.secureBoot);
     QCOMPARE(config.hasGraphics(), data.hasGraphics);
-    QCOMPARE(config.screenshotPreviewPath(), data.screenshotPreviewPath);
     QCOMPARE(config.autostart(), data.autostart);
     QCOMPARE(config.enableAccel3d(), data.enableAccel3d);
 }
@@ -134,7 +132,6 @@ void DomainConfigTest::applyUpdatesMutableFields()
     next.isoDiskPath = QStringLiteral("/tmp/next.iso");
     next.virtualDiskPath = QStringLiteral("/tmp/next.qcow2");
     next.virtualDiskPaths = {QStringLiteral("/tmp/next.qcow2")};
-    next.screenshotPreviewPath = QStringLiteral("/tmp/next.png");
     config.apply(next);
 
     QCOMPARE(config.name(), next.name);
@@ -151,7 +148,6 @@ void DomainConfigTest::applyUpdatesMutableFields()
     QCOMPARE(config.xmlConfigPath(), next.xmlConfigPath);
     QCOMPARE(config.isoDiskPath(), next.isoDiskPath);
     QCOMPARE(config.virtualDiskPath(), next.virtualDiskPath);
-    QCOMPARE(config.screenshotPreviewPath(), next.screenshotPreviewPath);
 
     QCOMPARE(nameSpy.count(), 1);
     QCOMPARE(activeSpy.count(), 1);
@@ -189,18 +185,10 @@ void DomainConfigTest::setPathsEmitsOnlyOnChange()
     DomainConfig config;
     QSignalSpy pathsSpy(&config, &DomainConfig::pathsChanged);
 
-    config.setPaths(QStringLiteral("/tmp/a.xml"),
-                    QStringLiteral("/tmp/a.iso"),
-                    QStringLiteral("/tmp/a.qcow2"),
-                    {QStringLiteral("/tmp/a.qcow2")},
-                    QStringLiteral("/tmp/a.png"));
+    config.setPaths(QStringLiteral("/tmp/a.xml"), QStringLiteral("/tmp/a.iso"), QStringLiteral("/tmp/a.qcow2"), {QStringLiteral("/tmp/a.qcow2")});
     QCOMPARE(pathsSpy.count(), 1);
 
-    config.setPaths(QStringLiteral("/tmp/a.xml"),
-                    QStringLiteral("/tmp/a.iso"),
-                    QStringLiteral("/tmp/a.qcow2"),
-                    {QStringLiteral("/tmp/a.qcow2")},
-                    QStringLiteral("/tmp/a.png"));
+    config.setPaths(QStringLiteral("/tmp/a.xml"), QStringLiteral("/tmp/a.iso"), QStringLiteral("/tmp/a.qcow2"), {QStringLiteral("/tmp/a.qcow2")});
     QCOMPARE(pathsSpy.count(), 1);
 }
 

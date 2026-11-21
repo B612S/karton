@@ -16,11 +16,9 @@
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDateTime>
-#include <QFile>
 #include <QMetaObject>
 #include <QPointer>
 #include <QSettings>
-#include <QStandardPaths>
 
 #include <utility>
 
@@ -420,13 +418,6 @@ QVector<LibvirtConnection::DomainListEntry> LibvirtConnection::collectDomains(vi
         const QString name = QString::fromUtf8(virDomainGetName(domainPtr));
         DomainXmlReader reader(domainPtr);
 
-        QString screenshotPreviewPath = reader.m_xmlInfo.screenshotPreviewPath;
-        if (screenshotPreviewPath.isEmpty()) {
-            screenshotPreviewPath = QStringLiteral("%1/previews/%2.png").arg(QStandardPaths::writableLocation(QStandardPaths::StateLocation), uuid);
-        }
-        QFile::remove(screenshotPreviewPath);
-        QFile::remove(screenshotPreviewPath + QStringLiteral(".tmp.png"));
-
         int autoFlag = 0;
         virDomainGetAutostart(domainPtr, &autoFlag);
 
@@ -460,7 +451,6 @@ QVector<LibvirtConnection::DomainListEntry> LibvirtConnection::collectDomains(vi
             .networkName = reader.m_xmlInfo.networkName,
             .secureBoot = reader.m_xmlInfo.secureBoot,
             .hasGraphics = reader.m_xmlInfo.hasGraphics,
-            .screenshotPreviewPath = screenshotPreviewPath,
             .autostart = autoFlag != 0,
         };
         entries.append(entry);
@@ -553,7 +543,7 @@ void LibvirtConnection::applyDomains(const QVector<DomainListEntry> &entries)
     }
     for (Domain *domain : previousDomains) {
         if (!m_domains.contains(domain)) {
-            m_karton->removeDomainCache(domain->config()->uuid(), domain->config()->screenshotPreviewPath());
+            m_karton->removeDomainCache(domain->config()->uuid());
             Q_EMIT domainRemoved(domain);
             domain->deleteLater();
         }
@@ -570,7 +560,7 @@ void LibvirtConnection::applyDomains(const QVector<DomainListEntry> &entries)
         const QStringList previousKnown = settings.value(knownKey).toStringList();
         for (const QString &uuid : previousKnown) {
             if (!currentUuids.contains(uuid)) {
-                m_karton->removeDomainCache(uuid, QString());
+                m_karton->removeDomainCache(uuid);
             }
         }
         QStringList currentKnown = currentUuids.values();
@@ -613,12 +603,6 @@ void LibvirtConnection::refreshDomainsSync()
         }
         const QString name = QString::fromUtf8(virDomainGetName(domainPtr));
         DomainXmlReader reader(domainPtr);
-        QString screenshotPreviewPath = reader.m_xmlInfo.screenshotPreviewPath;
-        if (screenshotPreviewPath.isEmpty()) {
-            screenshotPreviewPath = QStringLiteral("%1/previews/%2.png").arg(QStandardPaths::writableLocation(QStandardPaths::StateLocation), uuid);
-        }
-        QFile::remove(screenshotPreviewPath);
-        QFile::remove(screenshotPreviewPath + QStringLiteral(".tmp.png"));
         int autoFlag = 0;
         virDomainGetAutostart(domainPtr, &autoFlag);
 
@@ -660,7 +644,6 @@ void LibvirtConnection::refreshDomainsSync()
             .networkName = reader.m_xmlInfo.networkName,
             .secureBoot = reader.m_xmlInfo.secureBoot,
             .hasGraphics = reader.m_xmlInfo.hasGraphics,
-            .screenshotPreviewPath = screenshotPreviewPath,
             .autostart = autoFlag != 0,
         };
         entries.append(entry);

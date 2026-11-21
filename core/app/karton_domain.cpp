@@ -821,14 +821,6 @@ bool Karton::deleteDomain(const Domain *domain, const bool deleteDisk)
         }
     }
 
-    const QString previewPath = domain->config()->screenshotPreviewPath();
-    if (!remoteDomain && !previewPath.isEmpty() && QFile::exists(previewPath) && !QFile::remove(previewPath)) {
-        const QString errorMsg = QCoreApplication::translate("Karton", "failed_to_delete_preview_image_1").arg(previewPath);
-        qCWarning(KARTON_DEBUG) << errorMsg;
-        Q_EMIT errorOccurred(errorMsg);
-        success = false;
-    }
-
     auto *removableDomain = const_cast<Domain *>(domain);
     if (LibvirtConnection *connection = connectionForDomain(removableDomain)) {
         connection->removeDomain(removableDomain);

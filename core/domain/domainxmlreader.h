@@ -30,7 +30,6 @@ public:
         // True when the domain has a graphical screen that virsh screenshot can
         // capture. Text-only (serial console) domains report false.
         bool hasGraphics = false;
-        QString screenshotPreviewPath;
     };
 
     explicit DomainXmlReader(virDomainPtr domainPtr);

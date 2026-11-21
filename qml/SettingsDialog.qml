@@ -47,7 +47,6 @@ KartonDialog {
     property var networks: []
     property var pciHostDevices: []
     property var usbHostDevices: []
-    property var performance: ({})
     property bool xmlDirty: false
     property bool xmlLoading: false
     property bool optionalUpdating: false
@@ -75,8 +74,29 @@ KartonDialog {
     ]
     property string xmlContent: ""
     property string xmlLastValid: ""
+    property var xmlSearchMatches: []
+    property int xmlSearchIndex: -1
+    property string xmlSearchStatus: ""
+    readonly property var xmlThemes: Karton.xmlEditorThemes()
+    readonly property var xmlTheme: {
+        for (let i = 0; i < root.xmlThemes.length; ++i) {
+            if (root.xmlThemes[i].id === Karton.xmlEditorTheme) {
+                return root.xmlThemes[i];
+            }
+        }
+        return root.xmlThemes[0];
+    }
+    readonly property bool xmlThemeIsSystem: Karton.xmlEditorTheme === "system"
+    readonly property color xmlEditorBackground: root.xmlThemeIsSystem ? Kirigami.Theme.backgroundColor : root.xmlTheme.background
+    readonly property color xmlEditorTextColor: root.xmlThemeIsSystem ? Kirigami.Theme.textColor : root.xmlTheme.text
+    readonly property color xmlEditorTagColor: root.xmlThemeIsSystem ? Kirigami.Theme.linkColor : root.xmlTheme.tag
+    readonly property color xmlEditorAttributeColor: root.xmlThemeIsSystem ? Kirigami.Theme.neutralTextColor : root.xmlTheme.attribute
+    readonly property color xmlEditorValueColor: root.xmlThemeIsSystem ? Kirigami.Theme.positiveTextColor : root.xmlTheme.value
+    readonly property color xmlEditorCommentColor: root.xmlThemeIsSystem ? Kirigami.Theme.disabledTextColor : root.xmlTheme.comment
+    readonly property color xmlEditorDeclarationColor: root.xmlThemeIsSystem ? Kirigami.Theme.visitedLinkColor : root.xmlTheme.declaration
     property var xmlDevices: []
     property var inputDevices: []
+    property var autostartProblems: []
 
     readonly property var bootDevices: ["hd", "cdrom", "network"]
     readonly property var bootLabels: [qsTr("hard_disk"), qsTr("cd_rom"), qsTr("network")]
@@ -90,7 +110,7 @@ KartonDialog {
         return qsTr("s_1_mib").arg(memoryMiB);
     })
     readonly property var soundModels: ["ich9", "ac97", "none"]
-    readonly property var soundLabels: ["ich9", "AC97", qsTr("none")]
+    readonly property var soundLabels: [qsTr("sound_model_ich9"), qsTr("sound_model_ac97"), qsTr("none")]
     // Fixed resolutions specify the guest area, not the window: the viewer
     // toolbar adds about two grid units of chrome around it. Keep these values
     // in sync with VMViewerWindow.minimumGuestWidth/minimumGuestHeight.
@@ -126,7 +146,6 @@ KartonDialog {
         portForwards = Karton.domainPortForwards(domain);
         usbDevices = Karton.domainUsbDevices(domain);
         pciDevices = Karton.domainPciDevices(domain);
-        performance = Karton.domainStats(domain);
         xmlDevices = Karton.domainXmlDevices(domain);
         inputDevices = Karton.domainInputDevices(domain);
 
@@ -198,6 +217,7 @@ KartonDialog {
         clipboardFilesCombo.currentIndex = Karton.clipboardFilesMode();
         markSettingsSaved();
         formReady = true;
+        root.refreshAutostartProblems();
         // Host-wide lists are not needed to paint the first page; load them
         // after the dialog is visible instead of blocking on open.
         Qt.callLater(root.refreshHostLists);
@@ -393,6 +413,189 @@ KartonDialog {
         return root.xmlEscape(value);
     }
 
+    function ensureXmlCursorVisible() {
+        if (!xmlScroll || !xmlEditor || xmlScroll.height <= 0) {
+            return;
+        }
+        const margin = 24;
+        const maxY = Math.max(0, xmlScroll.contentHeight - xmlScroll.height);
+        const rect = xmlEditor.cursorRectangle;
+        const viewTop = xmlScroll.contentY;
+        const viewBottom = viewTop + xmlScroll.height;
+        // Keep the selection endpoint at the viewport edge and scroll in
+        // steady steps; jumping straight to the cursor was far too fast.
+        const step = 7;
+        if (rect.y + rect.height > viewBottom - margin) {
+            const position = xmlEditor.positionAt(rect.x, Math.min(xmlEditor.height - 1, viewBottom));
+            if (position >= 0 && position > xmlEditor.selectionStart) {
+                xmlEditor.select(xmlEditor.selectionStart, position);
+            }
+            if (xmlScroll.contentY < maxY) {
+                xmlScroll.contentY = Math.min(maxY, xmlScroll.contentY + step);
+            }
+        } else if (rect.y < viewTop + margin) {
+            const anchor = xmlEditor.selectionEnd;
+            const position = xmlEditor.positionAt(rect.x, Math.max(0, viewTop));
+            // select(anchor, position) keeps the cursor at the newly extended
+            // end; select(position, anchor) would move the cursor back to the
+            // anchor and the next tick would start selecting downwards.
+            if (position >= 0 && position < anchor) {
+                xmlEditor.select(anchor, position);
+            }
+            if (xmlScroll.contentY > 0) {
+                xmlScroll.contentY = Math.max(0, xmlScroll.contentY - step);
+            }
+        }
+    }
+
+    function revealXmlCursor() {
+        if (!xmlScroll || !xmlEditor || xmlScroll.height <= 0) {
+            return;
+        }
+        const margin = 24;
+        const maxY = Math.max(0, xmlScroll.contentHeight - xmlScroll.height);
+        const rect = xmlEditor.cursorRectangle;
+        const viewTop = xmlScroll.contentY;
+        const viewBottom = viewTop + xmlScroll.height;
+        if (rect.y < viewTop + margin) {
+            xmlScroll.contentY = Math.max(0, Math.min(maxY, rect.y - margin));
+        } else if (rect.y + rect.height > viewBottom - margin) {
+            xmlScroll.contentY = Math.min(maxY, rect.y + rect.height + margin - xmlScroll.height);
+        }
+    }
+
+    function collectXmlSearchMatches() {
+        const query = xmlSearchField.text;
+        if (query.length === 0) {
+            return [];
+        }
+        const haystack = xmlEditor.text.toLowerCase();
+        const needle = query.toLowerCase();
+        const matches = [];
+        let index = haystack.indexOf(needle);
+        while (index !== -1) {
+            matches.push(index);
+            index = haystack.indexOf(needle, index + Math.max(1, needle.length));
+        }
+        return matches;
+    }
+
+    function openXmlSearch() {
+        const selection = xmlEditor.selectedText;
+        if (selection.length > 0 && selection.length < 200 && selection.indexOf("\n") === -1) {
+            xmlSearchField.text = selection;
+        }
+        Qt.callLater(function() {
+            xmlSearchField.forceActiveFocus();
+            xmlSearchField.selectAll();
+            root.updateXmlSearch();
+        });
+    }
+
+    function closeXmlSearch() {
+        xmlSearchField.text = "";
+        root.xmlSearchMatches = [];
+        root.xmlSearchIndex = -1;
+        root.xmlSearchStatus = "";
+        xmlEditor.forceActiveFocus();
+    }
+
+    function updateXmlSearch() {
+        root.xmlSearchMatches = root.collectXmlSearchMatches();
+        root.xmlSearchIndex = -1;
+        if (xmlSearchField.text.length === 0) {
+            root.xmlSearchStatus = "";
+            return;
+        }
+        if (root.xmlSearchMatches.length === 0) {
+            root.xmlSearchStatus = qsTr("no_matches");
+            return;
+        }
+        root.selectXmlSearchMatch(0);
+    }
+
+    function selectXmlSearchMatch(index) {
+        const count = root.xmlSearchMatches.length;
+        if (count === 0) {
+            root.xmlSearchStatus = qsTr("no_matches");
+            return;
+        }
+        const normalized = ((index % count) + count) % count;
+        root.xmlSearchIndex = normalized;
+        const start = root.xmlSearchMatches[normalized];
+        xmlEditor.select(start, start + xmlSearchField.text.length);
+        root.revealXmlCursor();
+        root.xmlSearchStatus = qsTr("match_1_of_2").arg(normalized + 1).arg(count);
+    }
+
+    function findNextXml() {
+        root.xmlSearchMatches = root.collectXmlSearchMatches();
+        if (root.xmlSearchMatches.length === 0) {
+            root.xmlSearchStatus = xmlSearchField.text.length > 0 ? qsTr("no_matches") : "";
+            return;
+        }
+        const from = xmlEditor.selectionEnd;
+        let found = -1;
+        for (let i = 0; i < root.xmlSearchMatches.length; ++i) {
+            if (root.xmlSearchMatches[i] >= from) {
+                found = i;
+                break;
+            }
+        }
+        root.selectXmlSearchMatch(found >= 0 ? found : 0);
+    }
+
+    function findPreviousXml() {
+        root.xmlSearchMatches = root.collectXmlSearchMatches();
+        if (root.xmlSearchMatches.length === 0) {
+            root.xmlSearchStatus = xmlSearchField.text.length > 0 ? qsTr("no_matches") : "";
+            return;
+        }
+        const from = xmlEditor.selectionStart;
+        let found = -1;
+        for (let i = 0; i < root.xmlSearchMatches.length; ++i) {
+            if (root.xmlSearchMatches[i] < from) {
+                found = i;
+            } else {
+                break;
+            }
+        }
+        root.selectXmlSearchMatch(found >= 0 ? found : root.xmlSearchMatches.length - 1);
+    }
+
+    function refreshAutostartProblems() {
+        root.autostartProblems = root.domain && autostartCheck.checked
+            ? Karton.autostartProblems(root.domain)
+            : [];
+    }
+
+    function autostartProblemText(entry) {
+        if (!entry || !entry.kind) {
+            return "";
+        }
+        if (entry.kind === "daemon") {
+            return qsTr("start_on_boot_requires_the_1_service_to_be_enabled_run_sudo_systemctl_enable_now_1")
+                .arg(entry.unit || "libvirtd.service");
+        }
+        if (entry.kind === "session") {
+            return qsTr("session_vms_start_when_you_log_in_not_at_system_boot");
+        }
+        if (entry.kind === "network") {
+            return qsTr("could_not_enable_autostart_for_network_1").arg(entry.name || "");
+        }
+        if (entry.kind === "pool") {
+            return qsTr("could_not_enable_autostart_for_storage_pool_1").arg(entry.name || "");
+        }
+        return "";
+    }
+
+    function autostartProblemSummary() {
+        return root.autostartProblems
+            .map(entry => root.autostartProblemText(entry))
+            .filter(text => text.length > 0)
+            .join("\n");
+    }
+
     function openFilesystemEditor(device) {
         filesystemEditDialog.deviceIndex = device.index;
         filesystemEditDialog.shareSource = device.source;
@@ -519,6 +722,15 @@ KartonDialog {
                 return;
             }
         }
+        if (autostartCheck.checked) {
+            // Boot start only works when the VM's disks and network are also
+            // available after a reboot, so enable their autostart as well.
+            if (!Karton.prepareAutostart(domain)) {
+                applicationWindow().showPassiveNotification(
+                    qsTr("could_not_enable_autostart_for_all_networks_and_storage_pools"));
+            }
+            root.refreshAutostartProblems();
+        }
         Karton.saveAudioPlaybackEnabled(domain, soundOutputCheck.checked);
         Karton.saveMicrophoneEnabled(domain, microphoneCheck.checked);
         applyAudioToViewer();
@@ -587,6 +799,7 @@ KartonDialog {
             // Keep the dialog open; the user may want to adjust more settings.
             refresh();
             applicationWindow().showPassiveNotification(qsTr("settings_saved"));
+            root.notifyAutostartProblems();
             return;
         }
 
@@ -601,7 +814,16 @@ KartonDialog {
         if (!Karton.editDomain(domain, domainConfig)) {
             saving = false;
             pendingName = "";
+            return;
         }
+        root.notifyAutostartProblems();
+    }
+
+    function notifyAutostartProblems() {
+        if (!root.autostartProblems.some(entry => entry.kind === "daemon")) {
+            return;
+        }
+        applicationWindow().showPassiveNotification(root.autostartProblemSummary());
     }
 
     Connections {
@@ -609,11 +831,6 @@ KartonDialog {
         function onDomainXmlCached(uuid) {
             if (root.waitingForXml && root.domain && root.domain.config.uuid === uuid) {
                 root.startSettingsLoad();
-            }
-        }
-        function onDomainStatsUpdated(uuid) {
-            if (root.domain && root.domain.config.uuid === uuid) {
-                root.performance = Karton.domainStats(root.domain);
             }
         }
         function onNetworksUpdated() {
@@ -868,6 +1085,13 @@ KartonDialog {
                         }
                     }
 
+                    Kirigami.InlineMessage {
+                        Layout.fillWidth: true
+                        visible: autostartCheck.checked && root.autostartProblemSummary().length > 0
+                        type: Kirigami.MessageType.Information
+                        text: root.autostartProblemSummary()
+                    }
+
                     Controls.Label {
                         text: qsTr("details")
                         font.pixelSize: 15
@@ -892,12 +1116,15 @@ KartonDialog {
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
                         }
-                        Controls.Label {
+                        Kirigami.SelectableLabel {
+                            clip: true
+                            wrapMode: Text.NoWrap
+                            verticalAlignment: Text.AlignVCenter
+                            color: Kirigami.Theme.textColor
                             text: root.domain ? root.domain.config.uuid : ""
                             opacity: 0.7
                             Layout.preferredWidth: 260
                             Layout.alignment: Qt.AlignRight
-                            elide: Text.ElideRight
                         }
                         Controls.Label {
                             text: qsTr("state")
@@ -946,78 +1173,8 @@ KartonDialog {
                             elide: Text.ElideRight
                             onLinkActivated: Qt.openUrlExternally(link)
                         }
-                        Controls.Label {
-                            text: qsTr("short_os_id")
-                            font.pixelSize: 14
-                            Layout.fillWidth: true
-                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
-                        }
-                        Controls.Label {
-                            text: root.domain ? root.domain.config.shortOsId : ""
-                            opacity: 0.7
-                            Layout.preferredWidth: 260
-                            Layout.alignment: Qt.AlignRight
-                            elide: Text.ElideRight
-                        }
                     }
 
-                    Controls.Label {
-                        text: qsTr("performance")
-                        font.pixelSize: 15
-                        font.weight: Font.Bold
-                        Layout.fillWidth: true
-                        Layout.topMargin: 8
-                    }
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 1
-                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                    }
-                    GridLayout {
-                        columns: 2
-                        columnSpacing: 16
-                        rowSpacing: 16
-                        Layout.fillWidth: true
-
-                        Controls.Label {
-                            text: qsTr("cpu_usage")
-                            font.pixelSize: 14
-                            Layout.fillWidth: true
-                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
-                        }
-                        Controls.Label {
-                            text: root.performance.cpuPercent !== undefined ? qsTr("s_1").arg(root.performance.cpuPercent.toFixed(1)) : "—"
-                            opacity: 0.7
-                            Layout.preferredWidth: 260
-                            Layout.alignment: Qt.AlignRight
-                        }
-                        Controls.Label {
-                            text: qsTr("memory_usage")
-                            font.pixelSize: 14
-                            Layout.fillWidth: true
-                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
-                        }
-                        Controls.Label {
-                            text: root.performance.memoryUsedKiB !== undefined
-                                ? qsTr("s_1_mib_of_2_mib_used").arg((root.performance.memoryUsedKiB / 1024).toFixed(0)).arg((root.performance.memoryTotalKiB / 1024).toFixed(0))
-                                : "—"
-                            opacity: 0.7
-                            Layout.preferredWidth: 260
-                            Layout.alignment: Qt.AlignRight
-                        }
-                        Controls.Label {
-                            text: qsTr("vcpus")
-                            font.pixelSize: 14
-                            Layout.fillWidth: true
-                            Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
-                        }
-                        Controls.Label {
-                            text: root.performance.vcpus !== undefined ? root.performance.vcpus : ""
-                            opacity: 0.7
-                            Layout.preferredWidth: 260
-                            Layout.alignment: Qt.AlignRight
-                        }
-                    }
                     Item { Layout.fillHeight: true }
                 }
             }
@@ -1186,11 +1343,14 @@ KartonDialog {
                                         text: (modelData.device === "cdrom" ? qsTr("cd_rom") : qsTr("disk")) + " · " + modelData.target
                                         elide: Text.ElideRight
                                     }
-                                    Controls.Label {
+                                    Kirigami.SelectableLabel {
+                                        clip: true
+                                        wrapMode: Text.NoWrap
+                                        verticalAlignment: Text.AlignVCenter
+                                        color: Kirigami.Theme.textColor
                                         Layout.fillWidth: true
                                         text: modelData.source + " · " + modelData.bus
                                         opacity: 0.7
-                                        elide: Text.ElideRight
                                     }
                                 }
                                 Controls.Button {
@@ -1322,10 +1482,13 @@ KartonDialog {
                                 ColumnLayout {
                                     Layout.fillWidth: true
                                     spacing: 0
-                                    Controls.Label {
+                                    Kirigami.SelectableLabel {
+                                        clip: true
+                                        wrapMode: Text.NoWrap
+                                        verticalAlignment: Text.AlignVCenter
+                                        color: Kirigami.Theme.textColor
                                         Layout.fillWidth: true
                                         text: modelData.source.length > 0 ? modelData.source : modelData.type
-                                        elide: Text.ElideRight
                                     }
                                     Controls.Label {
                                         Layout.fillWidth: true
@@ -1651,7 +1814,7 @@ KartonDialog {
                             Layout.alignment: Qt.AlignRight
                         }
                         Controls.Label {
-                            text: qsTr("microphone")
+                            text: qsTr("sound_input")
                             font.pixelSize: 14
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignLeft | Qt.AlignVCenter
@@ -1932,9 +2095,12 @@ KartonDialog {
                                 implicitWidth: 20
                                 implicitHeight: 20
                             }
-                            Controls.Label {
+                            Kirigami.SelectableLabel {
+                                clip: true
+                                wrapMode: Text.NoWrap
+                                verticalAlignment: Text.AlignVCenter
+                                color: Kirigami.Theme.textColor
                                 text: modelData.label + (modelData.description.length > 0 ? " · " + modelData.description : "")
-                                elide: Text.ElideRight
                                 Layout.fillWidth: true
                             }
                             Controls.Button {
@@ -2172,6 +2338,7 @@ KartonDialog {
 
             // XML
             ColumnLayout {
+                id: xmlPage
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredWidth: 0
@@ -2179,11 +2346,51 @@ KartonDialog {
 
                     RowLayout {
                         Layout.fillWidth: true
-                        Controls.Label {
-                            text: qsTr("domain_xml")
-                            font.pixelSize: 15
-                            font.weight: Font.Bold
+                        spacing: 8
+
+                        Controls.TextField {
+                            id: xmlSearchField
                             Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            placeholderText: qsTr("find_in_xml")
+                            onTextChanged: root.updateXmlSearch()
+                            Keys.onPressed: (event) => {
+                                if (event.key === Qt.Key_Escape) {
+                                    root.closeXmlSearch();
+                                    event.accepted = true;
+                                } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                                    if (event.modifiers & Qt.ShiftModifier) {
+                                        root.findPreviousXml();
+                                    } else {
+                                        root.findNextXml();
+                                    }
+                                    event.accepted = true;
+                                }
+                            }
+                        }
+                        Controls.Label {
+                            visible: text.length > 0
+                            text: root.xmlSearchStatus
+                            opacity: 0.7
+                            font.pixelSize: 12
+                            Layout.preferredWidth: implicitWidth
+                            horizontalAlignment: Text.AlignRight
+                        }
+                        Controls.ToolButton {
+                            icon.name: "go-up-symbolic"
+                            display: Controls.AbstractButton.IconOnly
+                            enabled: root.xmlSearchMatches.length > 0
+                            onClicked: root.findPreviousXml()
+                            Controls.ToolTip.visible: hovered
+                            Controls.ToolTip.text: qsTr("previous_match")
+                        }
+                        Controls.ToolButton {
+                            icon.name: "go-down-symbolic"
+                            display: Controls.AbstractButton.IconOnly
+                            enabled: root.xmlSearchMatches.length > 0
+                            onClicked: root.findNextXml()
+                            Controls.ToolTip.visible: hovered
+                            Controls.ToolTip.text: qsTr("next_match")
                         }
                         Controls.Label {
                             text: qsTr("edit")
@@ -2203,6 +2410,13 @@ KartonDialog {
                             }
                         }
                     }
+
+                    Shortcut {
+                        sequence: "Ctrl+F"
+                        enabled: xmlPage.visible
+                        onActivated: root.openXmlSearch()
+                    }
+
                     Controls.Label {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
@@ -2215,7 +2429,7 @@ KartonDialog {
                         Layout.fillHeight: true
                         implicitHeight: Kirigami.Units.gridUnit * 24
                         radius: 6
-                        color: Kirigami.Theme.backgroundColor
+                        color: root.xmlEditorBackground
                         border.width: 1
                         border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
 
@@ -2224,6 +2438,9 @@ KartonDialog {
                             anchors.fill: parent
                             anchors.margins: 8
                             clip: true
+                            // Do not let a held mouse button pan the XML while
+                            // the user is selecting text; the wheel still scrolls.
+                            acceptedButtons: Qt.NoButton
 
                             Controls.TextArea {
                                 id: xmlEditor
@@ -2231,12 +2448,15 @@ KartonDialog {
                                 height: Math.max(xmlScroll.height, implicitHeight)
                                 text: root.xmlContent
                                 readOnly: !xmlEditSwitch.checked
-                                wrapMode: TextEdit.NoWrap
+                                // Wrapping here is visual only: the text value
+                                // (and therefore the XML sent to libvirt) keeps
+                                // its original line breaks.
+                                wrapMode: TextEdit.WrapAnywhere
                                 textFormat: TextEdit.PlainText
                                 selectByMouse: true
-                                font.family: "monospace"
-                                font.pixelSize: 12
-                                color: Kirigami.Theme.textColor
+                                font.family: Karton.xmlEditorFontFamily
+                                font.pixelSize: Karton.xmlEditorFontSize
+                                color: root.xmlEditorTextColor
                                 background: null
                                 onTextChanged: {
                                     // Do not mark the initial empty text or a
@@ -2248,6 +2468,11 @@ KartonDialog {
 
                                 XmlHighlighter {
                                     textDocument: xmlEditor.textDocument
+                                    tagColor: root.xmlEditorTagColor
+                                    attributeColor: root.xmlEditorAttributeColor
+                                    valueColor: root.xmlEditorValueColor
+                                    commentColor: root.xmlEditorCommentColor
+                                    declarationColor: root.xmlEditorDeclarationColor
                                 }
                             }
                         }
@@ -2314,9 +2539,12 @@ KartonDialog {
                                 ColumnLayout {
                                     Layout.fillWidth: true
                                     spacing: 0
-                                    Controls.Label {
+                                    Kirigami.SelectableLabel {
+                                        clip: true
+                                        wrapMode: Text.NoWrap
+                                        verticalAlignment: Text.AlignVCenter
+                                        color: Kirigami.Theme.textColor
                                         text: (modelData.target.length > 0 ? modelData.target : qsTr("filesystem")) + " · " + modelData.source
-                                        elide: Text.ElideRight
                                         Layout.fillWidth: true
                                     }
                                     Controls.Label {
@@ -2979,13 +3207,17 @@ KartonDialog {
     }
 
     Timer {
-        interval: 2000
+        // Follow a dragged selection in small increments. Only while the
+        // primary button is held, so normal reading/scrolling is untouched.
+        interval: 20
         repeat: true
-        running: root.opened && root.domain !== null && root.domain.isActive
+        running: xmlPage.visible
         onTriggered: {
-            if (root.domain) {
-                root.performance = Karton.domainStats(root.domain);
+            if (!Karton.primaryMouseButtonPressed() || !xmlEditor.activeFocus
+                    || xmlEditor.selectionStart === xmlEditor.selectionEnd) {
+                return;
             }
+            root.ensureXmlCursorVisible();
         }
     }
 
@@ -3158,6 +3390,7 @@ KartonDialog {
                     Controls.TextField {
                         Layout.fillWidth: true
                         readOnly: true
+                        selectByMouse: true
                         text: convertDiskDialog.destinationPath
                         placeholderText: qsTr("choose_destination_image")
                     }

@@ -3,6 +3,7 @@
 
 #include "app/karton.h"
 #include "app/karton_private.h"
+#include "app/libvirtconnection.h"
 
 #include <libvirt/libvirt.h>
 #include <libvirt/virterror.h>
@@ -16,6 +17,7 @@
 #include <QDomElement>
 #include <QFile>
 #include <QFileInfo>
+#include <QFontDatabase>
 #include <QHostAddress>
 #include <QImage>
 #include <QJsonDocument>
@@ -383,6 +385,194 @@ void Karton::saveConsoleCursorShape(const QString &shape)
     Q_EMIT consoleCursorShapeChanged();
 }
 
+int Karton::xmlEditorFontSize() const
+{
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    return qBound(8, settings.value(QStringLiteral("editor/fontSize"), 12).toInt(), 48);
+}
+
+void Karton::saveXmlEditorFontSize(int pixels)
+{
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    settings.setValue(QStringLiteral("editor/fontSize"), qBound(8, pixels, 48));
+    Q_EMIT xmlEditorSettingsChanged();
+}
+
+QString Karton::xmlEditorFontFamily() const
+{
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    const QString family = settings.value(QStringLiteral("editor/fontFamily"), QStringLiteral("monospace")).toString().trimmed();
+    return family.isEmpty() ? QStringLiteral("monospace") : family;
+}
+
+void Karton::saveXmlEditorFontFamily(const QString &family)
+{
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    const QString normalized = family.trimmed().isEmpty() ? QStringLiteral("monospace") : family.trimmed();
+    settings.setValue(QStringLiteral("editor/fontFamily"), normalized);
+    Q_EMIT xmlEditorSettingsChanged();
+}
+
+QVariantList Karton::xmlEditorThemes() const
+{
+    const auto makeTheme = [](const QString &id,
+                              const QString &name,
+                              const QString &background,
+                              const QString &text,
+                              const QString &tag,
+                              const QString &attribute,
+                              const QString &value,
+                              const QString &comment,
+                              const QString &declaration,
+                              bool system = false) {
+        QVariantMap theme;
+        theme.insert(QStringLiteral("id"), id);
+        theme.insert(QStringLiteral("name"), name);
+        theme.insert(QStringLiteral("system"), system);
+        theme.insert(QStringLiteral("background"), background);
+        theme.insert(QStringLiteral("text"), text);
+        theme.insert(QStringLiteral("tag"), tag);
+        theme.insert(QStringLiteral("attribute"), attribute);
+        theme.insert(QStringLiteral("value"), value);
+        theme.insert(QStringLiteral("comment"), comment);
+        theme.insert(QStringLiteral("declaration"), declaration);
+        return theme;
+    };
+
+    return {
+        makeTheme(QStringLiteral("system"), QCoreApplication::translate("Karton", "system_theme"), {}, {}, {}, {}, {}, {}, {}, true),
+        makeTheme(QStringLiteral("breeze-dark"),
+                  QStringLiteral("Breeze Dark"),
+                  QStringLiteral("#232629"),
+                  QStringLiteral("#eff0f1"),
+                  QStringLiteral("#3daee9"),
+                  QStringLiteral("#f67400"),
+                  QStringLiteral("#27ae60"),
+                  QStringLiteral("#7f8c8d"),
+                  QStringLiteral("#9b59b6")),
+        makeTheme(QStringLiteral("breeze-light"),
+                  QStringLiteral("Breeze Light"),
+                  QStringLiteral("#eff0f1"),
+                  QStringLiteral("#232629"),
+                  QStringLiteral("#2980b9"),
+                  QStringLiteral("#b35c00"),
+                  QStringLiteral("#1e8449"),
+                  QStringLiteral("#7f8c8d"),
+                  QStringLiteral("#8e44ad")),
+        makeTheme(QStringLiteral("solarized-dark"),
+                  QStringLiteral("Solarized Dark"),
+                  QStringLiteral("#002b36"),
+                  QStringLiteral("#839496"),
+                  QStringLiteral("#268bd2"),
+                  QStringLiteral("#b58900"),
+                  QStringLiteral("#2aa198"),
+                  QStringLiteral("#586e75"),
+                  QStringLiteral("#6c71c4")),
+        makeTheme(QStringLiteral("solarized-light"),
+                  QStringLiteral("Solarized Light"),
+                  QStringLiteral("#fdf6e3"),
+                  QStringLiteral("#657b83"),
+                  QStringLiteral("#268bd2"),
+                  QStringLiteral("#b58900"),
+                  QStringLiteral("#2aa198"),
+                  QStringLiteral("#93a1a1"),
+                  QStringLiteral("#6c71c4")),
+        makeTheme(QStringLiteral("monokai"),
+                  QStringLiteral("Monokai"),
+                  QStringLiteral("#272822"),
+                  QStringLiteral("#f8f8f2"),
+                  QStringLiteral("#f92672"),
+                  QStringLiteral("#fd971f"),
+                  QStringLiteral("#a6e22e"),
+                  QStringLiteral("#75715e"),
+                  QStringLiteral("#ae81ff")),
+        makeTheme(QStringLiteral("dracula"),
+                  QStringLiteral("Dracula"),
+                  QStringLiteral("#282a36"),
+                  QStringLiteral("#f8f8f2"),
+                  QStringLiteral("#ff79c6"),
+                  QStringLiteral("#ffb86c"),
+                  QStringLiteral("#50fa7b"),
+                  QStringLiteral("#6272a4"),
+                  QStringLiteral("#bd93f9")),
+        makeTheme(QStringLiteral("nord"),
+                  QStringLiteral("Nord"),
+                  QStringLiteral("#2e3440"),
+                  QStringLiteral("#d8dee9"),
+                  QStringLiteral("#88c0d0"),
+                  QStringLiteral("#ebcb8b"),
+                  QStringLiteral("#a3be8c"),
+                  QStringLiteral("#616e88"),
+                  QStringLiteral("#b48ead")),
+        makeTheme(QStringLiteral("gruvbox-dark"),
+                  QStringLiteral("Gruvbox Dark"),
+                  QStringLiteral("#282828"),
+                  QStringLiteral("#ebdbb2"),
+                  QStringLiteral("#83a598"),
+                  QStringLiteral("#fabd2f"),
+                  QStringLiteral("#b8bb26"),
+                  QStringLiteral("#928374"),
+                  QStringLiteral("#d3869b")),
+        makeTheme(QStringLiteral("green-on-black"),
+                  QStringLiteral("Green on Black"),
+                  QStringLiteral("#000000"),
+                  QStringLiteral("#00ff00"),
+                  QStringLiteral("#00ff00"),
+                  QStringLiteral("#00cc00"),
+                  QStringLiteral("#00ff88"),
+                  QStringLiteral("#008800"),
+                  QStringLiteral("#00aa00")),
+    };
+}
+
+QString Karton::xmlEditorTheme() const
+{
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    const QString id = settings.value(QStringLiteral("editor/theme"), QStringLiteral("system")).toString();
+    const QVariantList themes = xmlEditorThemes();
+    for (const QVariant &entry : themes) {
+        if (entry.toMap().value(QStringLiteral("id")).toString() == id) {
+            return id;
+        }
+    }
+    return QStringLiteral("system");
+}
+
+void Karton::saveXmlEditorTheme(const QString &themeId)
+{
+    QString normalized = themeId;
+    bool found = false;
+    const QVariantList themes = xmlEditorThemes();
+    for (const QVariant &entry : themes) {
+        if (entry.toMap().value(QStringLiteral("id")).toString() == normalized) {
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        normalized = QStringLiteral("system");
+    }
+    QSettings settings(kartonConfigPath(), QSettings::IniFormat);
+    settings.setValue(QStringLiteral("editor/theme"), normalized);
+    Q_EMIT xmlEditorSettingsChanged();
+}
+
+QStringList Karton::monospaceFontFamilies() const
+{
+    QStringList families;
+    const QStringList all = QFontDatabase::families();
+    for (const QString &family : all) {
+        if (QFontDatabase::isFixedPitch(family)) {
+            families.append(family);
+        }
+    }
+    families.removeDuplicates();
+    families.sort(Qt::CaseInsensitive);
+    families.removeAll(QStringLiteral("monospace"));
+    families.prepend(QStringLiteral("monospace"));
+    return families;
+}
+
 int Karton::cleanupStaleCaches()
 {
     if (!m_conn) {
@@ -393,29 +583,13 @@ int Karton::cleanupStaleCaches()
     for (const Domain *domain : std::as_const(m_domains)) {
         knownUuids.insert(domain->config()->uuid());
     }
-
-    int removed = 0;
-    const QString previewDirectory = QStandardPaths::writableLocation(QStandardPaths::StateLocation) + QStringLiteral("/previews");
-    QDir previewDir(previewDirectory);
-    if (previewDir.exists()) {
-        const QFileInfoList files = previewDir.entryInfoList({QStringLiteral("*.png")}, QDir::Files);
-        for (const QFileInfo &file : files) {
-            const QString name = file.fileName();
-            QString uuid = name;
-            const bool temporary = name.endsWith(QStringLiteral(".tmp.png"));
-            if (temporary) {
-                uuid.chop(8);
-            } else {
-                uuid.chop(4);
-            }
-            if (temporary || !knownUuids.contains(uuid)) {
-                if (QFile::remove(file.absoluteFilePath())) {
-                    ++removed;
-                }
-            }
+    for (const LibvirtConnection *connection : std::as_const(m_extraConnections)) {
+        for (const Domain *domain : connection->domains()) {
+            knownUuids.insert(domain->config()->uuid());
         }
     }
 
+    int removed = 0;
     QSettings settings(kartonConfigPath(), QSettings::IniFormat);
     const QStringList prefixes = {QStringLiteral("window/viewer"), QStringLiteral("audio"), QStringLiteral("display"), QStringLiteral("console")};
     for (const QString &prefix : prefixes) {
@@ -433,38 +607,11 @@ int Karton::cleanupStaleCaches()
     return removed;
 }
 
-int Karton::clearPreviewCache()
-{
-    QStandardPaths::StandardLocation location = QStandardPaths::StateLocation;
-    const QString previewDirectory = QStandardPaths::writableLocation(location) + QStringLiteral("/previews");
-    int removed = 0;
-    for (Domain *domain : std::as_const(m_domains)) {
-        domain->clearPreviewFrame();
-    }
-    QDir previewDir(previewDirectory);
-    if (previewDir.exists()) {
-        const QFileInfoList files = previewDir.entryInfoList({QStringLiteral("*.png")}, QDir::Files);
-        for (const QFileInfo &file : files) {
-            if (QFile::remove(file.absoluteFilePath())) {
-                ++removed;
-            }
-        }
-    }
-    return removed;
-}
-
-void Karton::removeDomainCache(const QString &uuid, const QString &previewPath)
+void Karton::removeDomainCache(const QString &uuid)
 {
     if (uuid.isEmpty()) {
         return;
     }
-    if (!previewPath.isEmpty()) {
-        QFile::remove(previewPath);
-    }
-    const QString previewDirectory = QStandardPaths::writableLocation(QStandardPaths::StateLocation) + QStringLiteral("/previews");
-    QFile::remove(previewDirectory + QLatin1Char('/') + uuid + QStringLiteral(".png"));
-    QFile::remove(previewDirectory + QLatin1Char('/') + uuid + QStringLiteral(".png.tmp.png"));
-    QFile::remove(previewDirectory + QLatin1Char('/') + uuid + QStringLiteral(".tmp.png"));
 
     QSettings settings(kartonConfigPath(), QSettings::IniFormat);
     const QStringList prefixes = {QStringLiteral("window/viewer"), QStringLiteral("audio"), QStringLiteral("display"), QStringLiteral("console")};

@@ -117,6 +117,7 @@ KartonDialog {
                     Layout.fillWidth: true
                     text: root.destinationDirectory
                     readOnly: true
+                    selectByMouse: true
                     enabled: !root.cloning
                     placeholderText: Karton.imagesDirectory()
                 }

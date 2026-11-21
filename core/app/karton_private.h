@@ -5,7 +5,6 @@
 
 #include <QByteArray>
 #include <QDir>
-#include <QFile>
 #include <QRegularExpression>
 #include <QSettings>
 #include <QStandardPaths>
@@ -25,12 +24,7 @@ inline QString kartonConfigPath()
 {
     const QString directory = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/karton");
     QDir().mkpath(directory);
-    const QString path = directory + QStringLiteral("/karton.conf");
-    const QString legacyPath = directory + QStringLiteral("/karton.ini");
-    if (!QFile::exists(path) && QFile::exists(legacyPath)) {
-        QFile::copy(legacyPath, path);
-    }
-    return path;
+    return directory + QStringLiteral("/karton.conf");
 }
 
 inline bool isValidDomainName(const QString &name)

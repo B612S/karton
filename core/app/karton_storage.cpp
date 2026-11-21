@@ -134,12 +134,13 @@ QVariantList Karton::storagePools(const QString &connectionUri, bool includeInac
 {
     const QString uri = connectionUri.isEmpty() ? this->connectionUri() : connectionUri;
     const QString cacheKey = uri + (includeInactive ? QStringLiteral("|all") : QStringLiteral("|active"));
+    const quint64 epoch = m_storagePoolsEpoch;
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
     const bool fresh = m_storagePoolsCache.contains(cacheKey) && now - m_storagePoolsCacheTime.value(cacheKey) < 15000;
     if (!fresh && !m_storagePoolsPending.contains(cacheKey)) {
         m_storagePoolsPending.insert(cacheKey);
         QPointer<Karton> guard(this);
-        QThreadPool::globalInstance()->start([guard, uri, includeInactive, cacheKey]() {
+        QThreadPool::globalInstance()->start([guard, uri, includeInactive, cacheKey, epoch]() {
             QVariantList result;
             if (guard) {
                 virConnectPtr conn = virConnectOpen(uri.toUtf8().constData());
@@ -153,13 +154,21 @@ QVariantList Karton::storagePools(const QString &connectionUri, bool includeInac
             }
             QMetaObject::invokeMethod(
                 guard,
-                [guard, uri, cacheKey, result]() {
+                [guard, uri, includeInactive, cacheKey, result, epoch]() {
                     if (!guard) {
+                        return;
+                    }
+                    guard->m_storagePoolsPending.remove(cacheKey);
+                    if (guard->m_storagePoolsEpoch != epoch) {
+                        // A start/stop/create/delete finished while this
+                        // snapshot was being collected. Drop it and start a
+                        // fresh scan so a refresh that was waiting on this
+                        // request still gets the post-mutation state.
+                        guard->storagePools(uri, includeInactive);
                         return;
                     }
                     guard->m_storagePoolsCache.insert(cacheKey, result);
                     guard->m_storagePoolsCacheTime.insert(cacheKey, QDateTime::currentMSecsSinceEpoch());
-                    guard->m_storagePoolsPending.remove(cacheKey);
                     Q_EMIT guard->storagePoolsUpdated(uri);
                 },
                 Qt::QueuedConnection);
@@ -172,12 +181,13 @@ QVariantList Karton::storageVolumes(const QString &poolName, const QString &conn
 {
     const QString uri = connectionUri.isEmpty() ? this->connectionUri() : connectionUri;
     const QString cacheKey = uri + QLatin1Char('|') + poolName;
+    const quint64 epoch = m_storagePoolsEpoch;
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
     const bool fresh = m_storageVolumesCache.contains(cacheKey) && now - m_storageVolumesCacheTime.value(cacheKey) < 15000;
     if (!fresh && !m_storageVolumesPending.contains(cacheKey)) {
         m_storageVolumesPending.insert(cacheKey);
         QPointer<Karton> guard(this);
-        QThreadPool::globalInstance()->start([guard, uri, poolName, cacheKey]() {
+        QThreadPool::globalInstance()->start([guard, uri, poolName, cacheKey, epoch]() {
             QVariantList result;
             if (guard) {
                 virConnectPtr conn = virConnectOpen(uri.toUtf8().constData());
@@ -191,13 +201,17 @@ QVariantList Karton::storageVolumes(const QString &poolName, const QString &conn
             }
             QMetaObject::invokeMethod(
                 guard,
-                [guard, uri, poolName, cacheKey, result]() {
+                [guard, uri, poolName, cacheKey, result, epoch]() {
                     if (!guard) {
+                        return;
+                    }
+                    guard->m_storageVolumesPending.remove(cacheKey);
+                    if (guard->m_storagePoolsEpoch != epoch) {
+                        guard->storageVolumes(poolName, uri);
                         return;
                     }
                     guard->m_storageVolumesCache.insert(cacheKey, result);
                     guard->m_storageVolumesCacheTime.insert(cacheKey, QDateTime::currentMSecsSinceEpoch());
-                    guard->m_storageVolumesPending.remove(cacheKey);
                     Q_EMIT guard->storageVolumesUpdated(poolName, uri);
                 },
                 Qt::QueuedConnection);
@@ -208,6 +222,7 @@ QVariantList Karton::storageVolumes(const QString &poolName, const QString &conn
 
 QString Karton::createStorageVolume(const QString &poolName, const QString &name, int sizeGB, const QString &format, const QString &connectionUri)
 {
+    ++m_storagePoolsEpoch;
     m_storagePoolsCache.clear();
     m_storagePoolsCacheTime.clear();
     m_storageVolumesCache.clear();
@@ -272,6 +287,9 @@ QString Karton::createStorageVolume(const QString &poolName, const QString &name
 
 bool Karton::deleteStorageVolume(const QString &poolName, const QString &name, const QString &connectionUri)
 {
+    ++m_storagePoolsEpoch;
+    m_storagePoolsCache.clear();
+    m_storagePoolsCacheTime.clear();
     m_storageVolumesCache.clear();
     m_storageVolumesCacheTime.clear();
     virConnectPtr conn = connectionHandleForUri(connectionUri);
@@ -299,6 +317,7 @@ bool Karton::deleteStorageVolume(const QString &poolName, const QString &name, c
 
 bool Karton::startStoragePool(const QString &poolName, const QString &connectionUri)
 {
+    ++m_storagePoolsEpoch;
     m_storagePoolsCache.clear();
     m_storagePoolsCacheTime.clear();
     m_storageVolumesCache.clear();
@@ -327,6 +346,7 @@ bool Karton::startStoragePool(const QString &poolName, const QString &connection
 
 bool Karton::stopStoragePool(const QString &poolName, const QString &connectionUri)
 {
+    ++m_storagePoolsEpoch;
     m_storagePoolsCache.clear();
     m_storagePoolsCacheTime.clear();
     m_storageVolumesCache.clear();
@@ -355,6 +375,7 @@ bool Karton::stopStoragePool(const QString &poolName, const QString &connectionU
 
 bool Karton::createStoragePool(const QString &poolName, const QString &targetPath, const QString &connectionUri)
 {
+    ++m_storagePoolsEpoch;
     m_storagePoolsCache.clear();
     m_storagePoolsCacheTime.clear();
     virConnectPtr conn = connectionHandleForUri(connectionUri);
@@ -400,6 +421,7 @@ bool Karton::createStoragePool(const QString &poolName, const QString &targetPat
 
 bool Karton::deleteStoragePool(const QString &poolName, const QString &connectionUri)
 {
+    ++m_storagePoolsEpoch;
     m_storagePoolsCache.clear();
     m_storagePoolsCacheTime.clear();
     m_storageVolumesCache.clear();

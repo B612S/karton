@@ -45,7 +45,7 @@ static const QByteArray sampleDomainXml = R"(<domain type='kvm'>
   <vcpu placement='static'>2</vcpu>
   <metadata>
     <karton:kde-karton xmlns:karton="https://invent.kde.org/sitter/karton">
-      <karton:data maxDiskStorage="4096" screenshotPreviewPath="/tmp/preview.png"/>
+      <karton:data maxDiskStorage="4096" unknownAttribute="keep"/>
     </karton:kde-karton>
     <libosinfo:libosinfo xmlns:libosinfo="http://libosinfo.org/xmlns/libvirt/domain/1.0">
       <libosinfo:os id="http://example.com/os/1" short-id="example1"/>
@@ -80,7 +80,6 @@ void DomainXmlTest::readerParsesMetadataAndDisks()
 
     QCOMPARE(info.hypervisorType, QStringLiteral("kvm"));
     QCOMPARE(info.maxDiskStorage, 4096);
-    QCOMPARE(info.screenshotPreviewPath, QStringLiteral("/tmp/preview.png"));
     QCOMPARE(info.shortOsId, QStringLiteral("example1"));
     QCOMPARE(info.osId, QStringLiteral("http://example.com/os/1"));
     QCOMPARE(info.virtualDiskPath, QStringLiteral("/tmp/disk.qcow2"));
@@ -343,7 +342,7 @@ void DomainXmlTest::builderUpdatesHardwareAndPreservesMetadata()
     QCOMPARE(dataNodes.count(), 1);
     const QDomElement data = dataNodes.at(0).toElement();
     QCOMPARE(data.attribute(QStringLiteral("maxDiskStorage")), QStringLiteral("8192"));
-    QCOMPARE(data.attribute(QStringLiteral("screenshotPreviewPath")), QStringLiteral("/tmp/preview.png"));
+    QCOMPARE(data.attribute(QStringLiteral("unknownAttribute")), QStringLiteral("keep"));
 }
 
 void DomainXmlTest::builderLeavesUnknownStorageUntouched()
@@ -466,14 +465,14 @@ void DomainXmlTest::builderUpdateZeroStorageKeepsMetadata()
     const QDomNodeList dataNodes = document.elementsByTagName(QStringLiteral("karton:data"));
     QCOMPARE(dataNodes.count(), 1);
     QCOMPARE(dataNodes.at(0).toElement().attribute(QStringLiteral("maxDiskStorage")), QStringLiteral("4096"));
-    QCOMPARE(dataNodes.at(0).toElement().attribute(QStringLiteral("screenshotPreviewPath")), QStringLiteral("/tmp/preview.png"));
+    QCOMPARE(dataNodes.at(0).toElement().attribute(QStringLiteral("unknownAttribute")), QStringLiteral("keep"));
 }
 
 void DomainXmlTest::builderPreservesUnknownMetadataAttributes()
 {
     const QByteArray xml = R"(<domain type='kvm'>
   <name>meta</name>
-  <metadata><karton:data xmlns:karton="urn:karton" maxDiskStorage="2048" screenshotPreviewPath="/tmp/a.png" unknown="keep"/></metadata>
+  <metadata><karton:data xmlns:karton="urn:karton" maxDiskStorage="2048" oldAttribute="keep" unknown="keep"/></metadata>
 </domain>)";
 
     DomainXmlBuilder builder;
@@ -484,7 +483,7 @@ void DomainXmlTest::builderPreservesUnknownMetadataAttributes()
     const QDomElement data = document.elementsByTagName(QStringLiteral("karton:data")).at(0).toElement();
     QCOMPARE(data.attribute(QStringLiteral("maxDiskStorage")), QStringLiteral("4096"));
     QCOMPARE(data.attribute(QStringLiteral("unknown")), QStringLiteral("keep"));
-    QCOMPARE(data.attribute(QStringLiteral("screenshotPreviewPath")), QStringLiteral("/tmp/a.png"));
+    QCOMPARE(data.attribute(QStringLiteral("oldAttribute")), QStringLiteral("keep"));
 }
 
 void DomainXmlTest::builderEscapesDiskSourcePaths()

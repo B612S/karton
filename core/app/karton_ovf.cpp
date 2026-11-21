@@ -21,6 +21,7 @@
 #include <QHash>
 #include <QList>
 #include <QPair>
+#include <QPointer>
 #include <QRegularExpression>
 #include <QStandardPaths>
 #include <QStringList>
@@ -261,19 +262,134 @@ QString buildOvfDomainXml(const QString &name, int cpus, int memoryMiB, const QS
 
     return document.toString(-1);
 }
+
+QString ovfPoolType(const QString &xml)
+{
+    QDomDocument document;
+    if (!document.setContent(xml)) {
+        return {};
+    }
+    return document.documentElement().attribute(QStringLiteral("type"));
+}
+
+bool poolSupportsOvfUpload(const QString &type)
+{
+    return type == QStringLiteral("dir") || type == QStringLiteral("fs") || type == QStringLiteral("netfs");
+}
+
+struct VolumeUploadResult {
+    bool success = false;
+    bool cancelled = false;
+    QString error;
+};
+
+VolumeUploadResult
+uploadVolumeFile(const QString &uri, const QString &poolName, const QString &volumeName, const QString &localPath, const std::atomic<bool> *cancelled)
+{
+    VolumeUploadResult result;
+    virConnectPtr conn = virConnectOpen(uri.toUtf8().constData());
+    if (!conn) {
+        result.error = QCoreApplication::translate("Karton", "not_connected_to_libvirt");
+        return result;
+    }
+    virStoragePoolPtr pool = virStoragePoolLookupByName(conn, poolName.toUtf8().constData());
+    if (!pool) {
+        result.error = QCoreApplication::translate("Karton", "storage_pool_1_was_not_found").arg(poolName);
+        virConnectClose(conn);
+        return result;
+    }
+    virStorageVolPtr volume = virStorageVolLookupByName(pool, volumeName.toUtf8().constData());
+    if (!volume) {
+        result.error = QCoreApplication::translate("Karton", "storage_volume_1_was_not_found").arg(volumeName);
+        virStoragePoolFree(pool);
+        virConnectClose(conn);
+        return result;
+    }
+    QFile file(localPath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        result.error = QCoreApplication::translate("Karton", "failed_to_open_1_2").arg(localPath, file.errorString());
+        virStorageVolFree(volume);
+        virStoragePoolFree(pool);
+        virConnectClose(conn);
+        return result;
+    }
+    virStreamPtr stream = virStreamNew(conn, 0);
+    if (!stream) {
+        result.error = QString::fromUtf8(virGetLastErrorMessage());
+        virStorageVolFree(volume);
+        virStoragePoolFree(pool);
+        virConnectClose(conn);
+        return result;
+    }
+    if (virStorageVolUpload(volume, stream, 0, 0, 0) < 0) {
+        result.error = QString::fromUtf8(virGetLastErrorMessage());
+        virStreamFree(stream);
+        virStorageVolFree(volume);
+        virStoragePoolFree(pool);
+        virConnectClose(conn);
+        return result;
+    }
+
+    QByteArray buffer(64 * 1024, Qt::Uninitialized);
+    while (true) {
+        if (cancelled && cancelled->load()) {
+            result.cancelled = true;
+            break;
+        }
+        const qint64 read = file.read(buffer.data(), buffer.size());
+        if (read < 0) {
+            result.error = file.errorString();
+            break;
+        }
+        if (read == 0) {
+            result.success = true;
+            break;
+        }
+        qint64 sent = 0;
+        while (sent < read) {
+            const int written = virStreamSend(stream, buffer.constData() + sent, static_cast<size_t>(read - sent));
+            if (written <= 0) {
+                result.error = QString::fromUtf8(virGetLastErrorMessage());
+                break;
+            }
+            sent += written;
+        }
+        if (!result.error.isEmpty()) {
+            break;
+        }
+    }
+
+    if (result.success) {
+        if (virStreamFinish(stream) < 0) {
+            result.success = false;
+            result.error = QString::fromUtf8(virGetLastErrorMessage());
+        }
+    } else {
+        virStreamAbort(stream);
+    }
+    virStreamFree(stream);
+    virStorageVolFree(volume);
+    virStoragePoolFree(pool);
+    virConnectClose(conn);
+    return result;
+}
 } // namespace
 
 bool Karton::importOvf(const QString &path,
                        const QString &requestedName,
                        const QString &destinationDirectory,
                        const QString &networkName,
-                       const QString &connectionUri)
+                       const QString &connectionUri,
+                       const QString &storagePoolName)
 {
     ScopedCallTimer timer("Karton::importOvf");
-    const QString destinationError = checkDirectoryWritable(destinationDirectory);
-    if (!destinationError.isEmpty()) {
-        Q_EMIT errorOccurred(destinationError);
-        return false;
+    const QString poolName = storagePoolName.trimmed();
+    if (poolName.isEmpty()) {
+        const QString destinationError = checkDirectoryWritable(destinationDirectory);
+        if (!destinationError.isEmpty()) {
+            Q_EMIT errorOccurred(destinationError);
+            return false;
+        }
     }
     if (m_ovfActive) {
         Q_EMIT errorOccurred(QCoreApplication::translate("Karton", "another_ovf_import_is_already_running"));
@@ -304,6 +420,7 @@ bool Karton::importOvf(const QString &path,
     m_ovfCommandId = 0;
     m_ovfRequestedName = requestedName;
     m_ovfPendingDestinationDirectory = destinationDirectory;
+    m_ovfPendingStoragePool = poolName;
     m_ovfPendingNetwork = networkName;
     m_ovfName = friendlyName(requestedName.trimmed().isEmpty() ? packageInfo.completeBaseName() : requestedName);
     m_ovfCreatedFiles.clear();
@@ -465,6 +582,7 @@ bool Karton::startOvfImportFromDescriptor(const QString &ovfPath, const QString 
 
     QStringList sources;
     QStringList createCapacities;
+    QList<qint64> volumeCapacities;
     const QList<QDomElement> disks = elementsByLocalName(document, QStringLiteral("Disk"));
     for (int i = 0; i < disks.count(); ++i) {
         const QDomElement disk = disks.at(i);
@@ -480,6 +598,11 @@ bool Karton::startOvfImportFromDescriptor(const QString &ovfPath, const QString 
             }
             sources.append(sourcePath);
             createCapacities.append(QString());
+            // The converted qcow2 is uploaded into a libvirt volume. Use the
+            // virtual size from the OVF when available and otherwise leave
+            // generous room for the converted allocation.
+            const qint64 sourceSize = QFileInfo(sourcePath).size();
+            volumeCapacities.append(qMax(capacityBytes(disk), sourceSize * 2));
         } else {
             const qint64 capacity = capacityBytes(disk);
             if (capacity <= 0) {
@@ -488,6 +611,7 @@ bool Karton::startOvfImportFromDescriptor(const QString &ovfPath, const QString 
             }
             sources.append(QString());
             createCapacities.append(QString::number(capacity));
+            volumeCapacities.append(capacity);
         }
     }
     if (sources.size() > 26) {
@@ -497,11 +621,11 @@ bool Karton::startOvfImportFromDescriptor(const QString &ovfPath, const QString 
         return fail(QCoreApplication::translate("Karton", "the_ovf_contains_no_disks"));
     }
 
+    virConnectPtr conn = connectionHandleForUri(m_ovfTargetUri);
+    if (!conn) {
+        return fail(QCoreApplication::translate("Karton", "not_connected_to_libvirt"));
+    }
     if (!m_ovfPendingNetwork.isEmpty()) {
-        virConnectPtr conn = connectionHandleForUri(m_ovfTargetUri);
-        if (!conn) {
-            return fail(QCoreApplication::translate("Karton", "not_connected_to_libvirt"));
-        }
         virNetworkPtr network = virNetworkLookupByName(conn, m_ovfPendingNetwork.toUtf8().constData());
         if (!network) {
             return fail(QCoreApplication::translate("Karton", "network_1_was_not_found").arg(m_ovfPendingNetwork));
@@ -509,21 +633,69 @@ bool Karton::startOvfImportFromDescriptor(const QString &ovfPath, const QString 
         virNetworkFree(network);
     }
 
-    QString destination = m_ovfPendingDestinationDirectory.trimmed();
-    if (destination.isEmpty()) {
-        destination = imagesDirectory();
-    }
-    if (!QDir().mkpath(destination)) {
-        return fail(QCoreApplication::translate("Karton", "failed_to_create_the_folder_1").arg(destination));
+    const bool poolMode = !m_ovfPendingStoragePool.isEmpty();
+    if (poolMode) {
+        virStoragePoolPtr pool = virStoragePoolLookupByName(conn, m_ovfPendingStoragePool.toUtf8().constData());
+        if (!pool) {
+            return fail(QCoreApplication::translate("Karton", "storage_pool_1_was_not_found").arg(m_ovfPendingStoragePool));
+        }
+        char *poolXml = virStoragePoolGetXMLDesc(pool, 0);
+        const QString type = poolXml ? ovfPoolType(QString::fromUtf8(poolXml)) : QString();
+        free(poolXml);
+        if (!poolSupportsOvfUpload(type)) {
+            virStoragePoolFree(pool);
+            return fail(QCoreApplication::translate("Karton", "storage_pool_1_does_not_support_ovf_import").arg(m_ovfPendingStoragePool));
+        }
+        if (virStoragePoolIsActive(pool) != 1 && virStoragePoolCreate(pool, 0) < 0) {
+            const QString error = QString::fromUtf8(virGetLastErrorMessage());
+            virStoragePoolFree(pool);
+            return fail(QCoreApplication::translate("Karton", "failed_to_start_storage_pool_1_2").arg(m_ovfPendingStoragePool, error));
+        }
+        virStoragePoolFree(pool);
     }
 
+    QString destination;
     QStringList destinations;
-    for (int i = 0; i < sources.size(); ++i) {
-        const QString target = QDir(destination).filePath(name + QStringLiteral("-disk") + QString::number(i + 1) + QStringLiteral(".qcow2"));
-        if (QFileInfo::exists(target)) {
-            return fail(QCoreApplication::translate("Karton", "the_destination_disk_1_already_exists").arg(target));
+    QStringList volumeNames;
+    QStringList temporaryFiles;
+    m_ovfUseStoragePool = poolMode;
+    m_ovfStoragePool = poolMode ? m_ovfPendingStoragePool : QString();
+    m_ovfCreatedVolumes.clear();
+    m_ovfCreatedFiles.clear();
+
+    if (poolMode) {
+        const QString tempDirectory = QDir::tempPath();
+        for (int i = 0; i < sources.size(); ++i) {
+            const QString volumeName = name + QStringLiteral("-disk") + QString::number(i + 1) + QStringLiteral(".qcow2");
+            const qint64 needed = qMax<qint64>(1, volumeCapacities.at(i));
+            const int sizeGB = static_cast<int>(qMax<qint64>(1, (needed + (1LL << 30) - 1) / (1LL << 30)));
+            m_ovfCreatedVolumes.append(volumeName);
+            const QString path = createStorageVolume(m_ovfStoragePool, volumeName, sizeGB, QStringLiteral("qcow2"), m_ovfTargetUri);
+            if (path.isEmpty()) {
+                // createStorageVolume() already reported the libvirt error.
+                return fail(QString());
+            }
+            destinations.append(path);
+            volumeNames.append(volumeName);
+            temporaryFiles.append(
+                QDir(tempDirectory)
+                    .filePath(QStringLiteral("karton-ovf-%1-disk%2.qcow2").arg(QUuid::createUuid().toString(QUuid::WithoutBraces), QString::number(i + 1))));
         }
-        destinations.append(target);
+    } else {
+        destination = m_ovfPendingDestinationDirectory.trimmed();
+        if (destination.isEmpty()) {
+            destination = imagesDirectory();
+        }
+        if (!QDir().mkpath(destination)) {
+            return fail(QCoreApplication::translate("Karton", "failed_to_create_the_folder_1").arg(destination));
+        }
+        for (int i = 0; i < sources.size(); ++i) {
+            const QString target = QDir(destination).filePath(name + QStringLiteral("-disk") + QString::number(i + 1) + QStringLiteral(".qcow2"));
+            if (QFileInfo::exists(target)) {
+                return fail(QCoreApplication::translate("Karton", "the_destination_disk_1_already_exists").arg(target));
+            }
+            destinations.append(target);
+        }
     }
 
     if (m_ovfCancelRequested.load()) {
@@ -535,8 +707,9 @@ bool Karton::startOvfImportFromDescriptor(const QString &ovfPath, const QString 
     m_ovfNetwork = m_ovfPendingNetwork;
     m_ovfDiskSources = sources;
     m_ovfDiskDestinations = destinations;
+    m_ovfDiskVolumeNames = volumeNames;
+    m_ovfDiskTempFiles = temporaryFiles;
     m_ovfDiskCreateCapacities = createCapacities;
-    m_ovfCreatedFiles.clear();
     m_ovfCpus = cpus;
     m_ovfMemoryMiB = memoryMiB;
     m_ovfNextDisk = 0;
@@ -561,24 +734,65 @@ void Karton::convertNextOvfDisk()
     }
 
     const int index = m_ovfNextDisk;
-    const QString destination = m_ovfDiskDestinations.at(index);
+    const bool poolMode = m_ovfUseStoragePool && !m_ovfStoragePool.isEmpty();
+    const QString target = m_ovfDiskDestinations.at(index);
+    // A pool volume is owned by libvirt (often by root), so qemu-img writes a
+    // temporary local qcow2 first and the result is streamed into the volume
+    // afterwards. This keeps the import working for system pools too.
+    const QString output = poolMode ? m_ovfDiskTempFiles.at(index) : target;
     QStringList arguments;
     if (m_ovfDiskSources.at(index).isEmpty()) {
-        arguments = {QStringLiteral("create"), QStringLiteral("-f"), QStringLiteral("qcow2"), destination, m_ovfDiskCreateCapacities.at(index)};
+        arguments = {QStringLiteral("create"), QStringLiteral("-f"), QStringLiteral("qcow2"), output, m_ovfDiskCreateCapacities.at(index)};
     } else {
-        arguments = {QStringLiteral("convert"), QStringLiteral("-O"), QStringLiteral("qcow2"), QStringLiteral("-U"), m_ovfDiskSources.at(index), destination};
+        arguments = {QStringLiteral("convert"), QStringLiteral("-O"), QStringLiteral("qcow2"), QStringLiteral("-U"), m_ovfDiskSources.at(index), output};
     }
 
-    m_ovfCommandId = m_commandRunner->runCommand(QStringLiteral("qemu-img"), arguments, [this, destination](bool success, const QString &output) {
+    m_ovfCommandId = m_commandRunner->runCommand(QStringLiteral("qemu-img"), arguments, [this, output, poolMode](bool success, const QString &commandOutput) {
         m_ovfCommandId = 0;
         if (!success) {
-            QFile::remove(destination);
-            finishOvfImport(false, m_ovfCancelRequested.load() ? QCoreApplication::translate("Karton", "ovf_import_cancelled") : output.trimmed());
+            QFile::remove(output);
+            finishOvfImport(false, m_ovfCancelRequested.load() ? QCoreApplication::translate("Karton", "ovf_import_cancelled") : commandOutput.trimmed());
             return;
         }
-        m_ovfCreatedFiles.append(destination);
-        ++m_ovfNextDisk;
-        convertNextOvfDisk();
+        if (!poolMode) {
+            m_ovfCreatedFiles.append(output);
+            ++m_ovfNextDisk;
+            convertNextOvfDisk();
+            return;
+        }
+
+        const int uploadedIndex = m_ovfNextDisk;
+        const QString uri = m_ovfTargetUri;
+        const QString poolName = m_ovfStoragePool;
+        const QString volumeName = m_ovfDiskVolumeNames.at(uploadedIndex);
+        setOvfImportPhase(QStringLiteral("uploading"));
+        QPointer<Karton> guard(this);
+        QThreadPool::globalInstance()->start([guard, uri, poolName, volumeName, output]() {
+            VolumeUploadResult result;
+            if (guard) {
+                result = uploadVolumeFile(uri, poolName, volumeName, output, &guard->m_ovfCancelRequested);
+            }
+            if (!guard) {
+                QFile::remove(output);
+                return;
+            }
+            QMetaObject::invokeMethod(
+                guard.data(),
+                [guard, result, output]() {
+                    QFile::remove(output);
+                    if (!guard || !guard->m_ovfActive) {
+                        return;
+                    }
+                    if (!result.success) {
+                        guard->finishOvfImport(false, result.cancelled ? QCoreApplication::translate("Karton", "ovf_import_cancelled") : result.error);
+                        return;
+                    }
+                    ++guard->m_ovfNextDisk;
+                    guard->setOvfImportPhase(QStringLiteral("converting"));
+                    guard->convertNextOvfDisk();
+                },
+                Qt::QueuedConnection);
+        });
     });
 }
 
@@ -605,6 +819,28 @@ void Karton::finishOvfImport(bool success, const QString &message)
         }
     }
 
+    virConnectPtr conn = connectionHandleForUri(m_ovfTargetUri);
+    const bool createdVolumes = !m_ovfCreatedVolumes.isEmpty();
+    if (conn && createdVolumes) {
+        virStoragePoolPtr pool = virStoragePoolLookupByName(conn, m_ovfStoragePool.toUtf8().constData());
+        if (pool) {
+            for (const QString &volumeName : std::as_const(m_ovfCreatedVolumes)) {
+                virStorageVolPtr volume = virStorageVolLookupByName(pool, volumeName.toUtf8().constData());
+                if (!volume) {
+                    continue;
+                }
+                if (!success) {
+                    virStorageVolDelete(volume, 0);
+                }
+                virStorageVolFree(volume);
+            }
+            if (success) {
+                virStoragePoolRefresh(pool, 0);
+            }
+            virStoragePoolFree(pool);
+        }
+    }
+
     if (!success) {
         for (const QString &file : std::as_const(m_ovfCreatedFiles)) {
             QFile::remove(file);
@@ -620,21 +856,36 @@ void Karton::finishOvfImport(bool success, const QString &message)
         }
         Q_EMIT domainImported(true, name);
     }
+    if (createdVolumes) {
+        ++m_storagePoolsEpoch;
+        m_storagePoolsCache.clear();
+        m_storagePoolsCacheTime.clear();
+        m_storageVolumesCache.clear();
+        m_storageVolumesCacheTime.clear();
+        Q_EMIT storagePoolsUpdated(m_ovfTargetUri);
+    }
 
     if (!m_ovfTemporaryDirectory.isEmpty()) {
         removeDirectoryInBackground(m_ovfTemporaryDirectory);
     }
     m_ovfTemporaryDirectory.clear();
     m_ovfCreatedFiles.clear();
+    m_ovfCreatedVolumes.clear();
     m_ovfDiskSources.clear();
     m_ovfDiskDestinations.clear();
+    m_ovfDiskVolumeNames.clear();
+    m_ovfDiskTempFiles.clear();
     m_ovfDiskCreateCapacities.clear();
+    m_ovfDestinationDirectory.clear();
+    m_ovfStoragePool.clear();
+    m_ovfUseStoragePool = false;
     m_ovfActive = false;
     m_ovfNextDisk = 0;
     m_ovfCommandId = 0;
     m_ovfCancelRequested = false;
     m_ovfRequestedName.clear();
     m_ovfPendingDestinationDirectory.clear();
+    m_ovfPendingStoragePool.clear();
     m_ovfPendingNetwork.clear();
     m_ovfImportProgress = -1;
     m_ovfImportProcessedBytes = 0;

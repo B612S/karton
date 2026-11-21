@@ -412,6 +412,7 @@ KartonDialog {
                                 Layout.fillWidth: true
                                 placeholderText: qsTr("none")
                                 readOnly: true
+                                selectByMouse: true
                             }
                             Controls.Button {
                                 text: qsTr("browse")
@@ -590,6 +591,7 @@ KartonDialog {
                                 id: diskFolderField
                                 Layout.fillWidth: true
                                 readOnly: true
+                                selectByMouse: true
                                 placeholderText: Karton.imagesDirectory()
                             }
                             Controls.Button {
@@ -689,7 +691,8 @@ KartonDialog {
                             font.pixelSize: 12
                             text: qsTr("leave_the_file_name_empty_to_use_the_automatic_name_the_1_extension_is_added_automatically").arg(diskFormatCombo.currentText)
                         }
-                        Controls.Label {
+                        Kirigami.SelectableLabel {
+                            color: Kirigami.Theme.textColor
                             visible: !addDomainDialog.remoteTarget && !addDomainDialog.localUseStoragePool
                             Layout.columnSpan: 2
                             Layout.fillWidth: true
@@ -867,12 +870,15 @@ KartonDialog {
                         Layout.fillWidth: true
 
                         Controls.Label { text: qsTr("connection"); opacity: 0.7; Layout.fillWidth: true }
-                        Controls.Label {
+                        Kirigami.SelectableLabel {
+                            clip: true
+                            wrapMode: Text.NoWrap
+                            verticalAlignment: Text.AlignVCenter
+                            color: Kirigami.Theme.textColor
                             text: addDomainDialog.connectionUri
                             Layout.preferredWidth: 260
                             Layout.alignment: Qt.AlignRight
                             horizontalAlignment: Text.AlignRight
-                            elide: Text.ElideMiddle
                         }
                         Controls.Label { text: qsTr("name"); opacity: 0.7; Layout.fillWidth: true }
                         Controls.Label {
@@ -883,12 +889,15 @@ KartonDialog {
                             elide: Text.ElideRight
                         }
                         Controls.Label { text: qsTr("installation_image"); opacity: 0.7; Layout.fillWidth: true }
-                        Controls.Label {
+                        Kirigami.SelectableLabel {
+                            clip: true
+                            wrapMode: Text.NoWrap
+                            verticalAlignment: Text.AlignVCenter
+                            color: Kirigami.Theme.textColor
                             text: diskImageField.text.length > 0 ? diskImageField.text : qsTr("not_selected")
                             Layout.preferredWidth: 260
                             Layout.alignment: Qt.AlignRight
                             horizontalAlignment: Text.AlignRight
-                            elide: Text.ElideRight
                         }
                         Controls.Label { text: qsTr("os_variant"); opacity: 0.7; Layout.fillWidth: true }
                         Controls.Label {
@@ -920,7 +929,11 @@ KartonDialog {
                             horizontalAlignment: Text.AlignRight
                         }
                         Controls.Label { text: qsTr("disk_path"); opacity: 0.7; Layout.fillWidth: true }
-                        Controls.Label {
+                        Kirigami.SelectableLabel {
+                            clip: true
+                            wrapMode: Text.NoWrap
+                            verticalAlignment: Text.AlignVCenter
+                            color: Kirigami.Theme.textColor
                             text: {
                                 const summary = addDomainDialog.remoteDiskSummary();
                                 return summary.length > 0 ? summary : qsTr("not_set");
@@ -928,7 +941,6 @@ KartonDialog {
                             Layout.preferredWidth: 260
                             Layout.alignment: Qt.AlignRight
                             horizontalAlignment: Text.AlignRight
-                            elide: Text.ElideMiddle
                         }
                         Controls.Label { text: qsTr("firmware"); opacity: 0.7; Layout.fillWidth: true }
                         Controls.Label {
