@@ -7,7 +7,8 @@ rem
 rem Run this file inside the guest (double-click it or start it from an
 rem elevated prompt). It downloads and installs the virtio-win guest tools
 rem bundle (VirtIO drivers, QEMU guest agent, SPICE agent), falls back to the
-rem driver MSI, installs WinFsp for VirtIO FS shares and offers to restart
+rem driver MSI, installs the maintained SPICE agent (side/forward mouse buttons
+rem need it), installs WinFsp for VirtIO FS shares and offers to restart
 rem Windows. The guest needs internet access: Karton does not download or
 rem execute anything in the guest.
 rem
@@ -41,6 +42,8 @@ echo Log: %LOG%
 set "TOOLS=%WORK%\virtio-win-guest-tools.exe"
 set "DRIVER_MSI=%WORK%\virtio-win-gt-x64.msi"
 set "WINFSP_MSI=%WORK%\winfsp.msi"
+set "VDAGENT_MSI=%WORK%\spice-vdagent-x64.msi"
+set "VDAGENT_URL=https://github.com/nefarius/vd_agent/releases/download/v0.13.0/spice-vdagent-x64-0.13.0.msi"
 set "RC=0"
 set "DRIVERS_OK="
 
@@ -79,7 +82,7 @@ echo Downloading WinFsp for VirtIO FS file sharing...
 call :download "https://github.com/winfsp/winfsp/releases/download/v2.1/winfsp-2.1.25156.msi" "%WINFSP_MSI%"
 if errorlevel 1 (
     echo WinFsp download failed; VirtIO FS shares will not work. >>"%LOG%"
-    goto :finished
+    goto :vdagent
 )
 echo Installing WinFsp...
 start /wait "" msiexec /i "%WINFSP_MSI%" /qn /norestart /l*v "%WORK%\karton-winfsp-msi.log" >>"%LOG%" 2>&1
@@ -87,6 +90,23 @@ set "RC=%errorlevel%"
 echo WinFsp MSI exit code: %RC% >>"%LOG%"
 call :accepted %RC%
 if errorlevel 1 echo WinFsp installation failed with exit code %RC%. >>"%LOG%"
+
+:vdagent
+echo.
+echo Updating the SPICE agent for side/forward mouse buttons...
+call :download "%VDAGENT_URL%" "%VDAGENT_MSI%"
+if errorlevel 1 (
+    echo SPICE agent download failed; side mouse buttons may not work. >>"%LOG%"
+    goto :finished
+)
+call :at_least "%VDAGENT_MSI%" 100000
+if errorlevel 1 goto :finished
+echo Installing the updated SPICE agent...
+start /wait "" msiexec /i "%VDAGENT_MSI%" /qn /norestart /l*v "%WORK%\karton-spice-vdagent-msi.log" >>"%LOG%" 2>&1
+set "RC=%errorlevel%"
+echo SPICE agent MSI exit code: %RC% >>"%LOG%"
+call :accepted %RC%
+if errorlevel 1 echo SPICE agent update failed with exit code %RC%. >>"%LOG%"
 
 :finished
 echo.

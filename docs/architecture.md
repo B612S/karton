@@ -610,12 +610,14 @@ list in the root `CMakeLists.txt`, otherwise it will not be bundled.
   painted. There is one display node per renderer and one root node that owns
   it. Client mouse mode sends no SPICE `cursor-move` events, so the host cursor
   follows the local pointer instead of the initial `(0, 0)` cursor position.
-  Karton keeps generation in client mode: Windows back/forward buttons are
-  translated by `DomainViewer` to Alt+Left/Alt+Right because the Windows
-  vdagent used by the client mouse path may drop XBUTTON1/XBUTTON2. Do not
+  Karton keeps generation in client mode. Side/extra buttons are sent
+  natively; on Windows they reach the guest as XBUTTON1/XBUTTON2 only when the
+  SPICE vdagent supports SBUTTON/EBUTTON (the maintained `vd_agent` v0.11+
+  maps them; `scripts/guests/windows/install.cmd` installs v0.13.0). Do not
   switch Windows domains to server mouse mode: it makes the guest cursor move
   relatively, the viewer has to hide the host pointer, and the fullscreen
-  toolbar becomes hard to use. Domains with an explicit server-mode `<mouse>`
+  toolbar becomes hard to use. Do not synthesize Alt+Left/Alt+Right either;
+  the native buttons must work. Domains with an explicit server-mode `<mouse>`
   in their XML still get the overlay fallback: the viewer paints the guest
   cursor at the reported `cursor-move` position and hides the host pointer.
 - The viewer's `DomainViewer` must receive keyboard focus after the window

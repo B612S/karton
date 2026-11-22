@@ -124,9 +124,11 @@ Full layout rules and page inventory:
 - The primary renderer keeps one persistent RHI texture, uploads only damaged
   rectangles, and never calls `createTextureFromImage()` per frame.
 - SPICE cursor: client mode installs the guest shape as the host cursor and
-  keeps the floating toolbar usable. Windows back/forward buttons are translated
-  to Alt+Left/Alt+Right in the viewer because the agent mouse path may drop
-  XBUTTON1/2; do not switch Windows domains to server mouse mode. External
+  keeps the floating toolbar usable. Side/extra buttons are sent natively; on
+  Windows they reach the guest as XBUTTON1/2 only when the SPICE vdagent
+  supports SBUTTON/EBUTTON (v0.11+). The guest tools script installs the
+  maintained agent. Do not switch Windows domains to server mouse mode
+  (relative cursor, broken toolbar) or synthesize keyboard shortcuts. External
   server-mode domains use the overlay fallback, but Karton never generates it.
   Input is sent only when the inputs channel is ready.
 - Request the full viewer area from the guest agent, not the aspect-fitted item

@@ -212,9 +212,10 @@ QString DomainXmlBuilder::generateXML(const DomainConfig *config, bool remote)
     // devices->graphics element
     const bool enableAccel3d = config->enableAccel3d();
     // Keep the default client mouse mode. The absolute tablet gives smooth
-    // pointer movement and works with the floating toolbar; Windows side
-    // buttons are translated to Alt+Left/Alt+Right by DomainViewer because the
-    // guest agent path used in client mode may not forward XBUTTON1/XBUTTON2.
+    // pointer movement and works with the floating toolbar. Side/extra buttons
+    // are sent natively by DomainViewer; Windows needs a guest vdagent that
+    // maps SBUTTON/EBUTTON to XBUTTON1/XBUTTON2 (the guest tools script
+    // installs the maintained agent).
     addGraphicsDevices(document,
                        devices,
                        {.type = QStringLiteral("spice"),
