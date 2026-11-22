@@ -21,7 +21,6 @@ private Q_SLOTS:
     void reportsMissingArchive();
     void cancellationStopsExtraction();
 
-private:
     static bool makeArchive(const QString &directory, const QString &archive, const QStringList &files);
 };
 

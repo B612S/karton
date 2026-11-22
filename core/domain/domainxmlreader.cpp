@@ -56,9 +56,7 @@ DomainXmlReader::XmlInfo DomainXmlReader::parseXml(const QByteArray &xml)
         } else if (xmlReader.name() == QStringLiteral("loader")) {
             const QString secure = xmlReader.attributes().value(QStringLiteral("secure")).toString();
             info.secureBoot = secure == QStringLiteral("yes");
-        } else if (xmlReader.name() == QStringLiteral("graphics")) {
-            info.hasGraphics = true;
-        } else if (xmlReader.name() == QStringLiteral("video")) {
+        } else if (xmlReader.name() == QStringLiteral("graphics") || xmlReader.name() == QStringLiteral("video")) {
             // A video device alone still gives QEMU a framebuffer even when no
             // SPICE/VNC graphics element is configured.
             info.hasGraphics = true;
