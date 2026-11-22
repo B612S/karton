@@ -2679,6 +2679,9 @@ void Karton::prefetchDomainXml(const Domain *domain)
 
 char *Karton::cachedDomainXml(const Domain *domain, bool inactivePreferred) const
 {
+    // A cache miss turns into a blocking libvirt read on the GUI thread; warn
+    // when that takes long enough to freeze the viewer.
+    ScopedCallTimer timer("Karton::cachedDomainXml");
     if (!domain || !domain->domainPtr()) {
         return nullptr;
     }

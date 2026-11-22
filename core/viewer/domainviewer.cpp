@@ -35,6 +35,7 @@
 #include "viewer/glscanoutrenderer.h"
 #include "viewer/primarysurfacerenderer.h"
 
+#include "util/calltimer.h"
 #include "util/evdev_to_xtkbd_map.h"
 
 DomainViewer::DomainViewer(QQuickItem *parent)
@@ -170,6 +171,10 @@ void DomainViewer::componentComplete()
 
 bool DomainViewer::setupSpiceSession()
 {
+    // Runs on the GUI thread whenever a viewer/preview (re)connects. Reading
+    // the endpoint from libvirt can block while the domain is still starting,
+    // so log it when that freezes the window.
+    ScopedCallTimer timer("DomainViewer::setupSpiceSession");
     if (m_previewOnly && m_previewStopped) {
         return false;
     }

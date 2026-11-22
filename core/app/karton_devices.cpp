@@ -45,6 +45,7 @@
 #include "libvirt/libvirteventloop.h"
 #include "libvirt/libvirtmonitor.h"
 #include "os/osiconmapper.h"
+#include "util/calltimer.h"
 
 using namespace KartonCommon;
 
@@ -64,6 +65,10 @@ QString Karton::domainXml(const Domain *domain) const
 
 QString Karton::domainLiveXml(const Domain *domain) const
 {
+    // Runs on the GUI thread when the viewer/preview needs the SPICE endpoint.
+    // A cache miss falls back to a blocking libvirt read, so warn when that
+    // stalls the window (for example while the domain is still starting).
+    ScopedCallTimer timer("Karton::domainLiveXml");
     if (!domain || !domain->domainPtr()) {
         return {};
     }
