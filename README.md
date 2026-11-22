@@ -310,7 +310,7 @@ the application manually and exercise the affected pages with a throwaway VM.
 - Keep user-visible changes tested with a disposable VM.
 - Never test destructive operations on the user's production VMs.
 
-See `AGENTS.md` for the full engineering conventions and architecture notes.
+See `AGENTS.md` for the short engineering guide and `docs/` for the detailed architecture, development and UI notes.
 
 ## Localization
 
