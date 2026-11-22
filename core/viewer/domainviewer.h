@@ -181,6 +181,10 @@ Q_SIGNALS:
 private Q_SLOTS:
     void handleRendererFrameSizeChanged();
     void updateLivePreview();
+    // Tells the renderer whether this window will present the frames it gets:
+    // a preview or minimized window defers the pixel conversion.
+    void updateRendererEagerness();
+    void handleWindowChanged(QQuickWindow *window);
     void applyGuestCursor();
     void applyDisplayResolution();
 
@@ -344,6 +348,7 @@ private:
     int m_previewBlankFrames = 0;
     bool m_previewStopped = false;
     bool m_disconnecting = false;
+    QMetaObject::Connection m_windowVisibilityConnection;
 
     static constexpr quint32 x11_wayland_evdev_offset = 8;
     // difference of 8 between x11 wayland.

@@ -819,20 +819,14 @@ Karton style; do not invent a separate layout for a new screen.
   the guest does not block again. Seats
   and compositor grabs that never reach the client (for example some
   Meta/Super combinations) still cannot be intercepted.
-- KWin still consumes some window shortcuts such as Alt+F4 even with the
-  inhibitor protocol, so `Karton::updateGlobalShortcutsBlock()` also calls
-  `org.kde.kglobalaccel` `blockGlobalShortcuts(true)` while a viewer has the
-  pointer over the guest. That is process-global KDE state: if Karton dies
-  without clearing it, every global shortcut in the session stops working.
-  `Karton::releaseGlobalShortcuts()` (called from `aboutToQuit`, the
-  `Karton` destructor and `main.cpp`) clears it through
-  `KartonShortcuts::unblockGlobalShortcuts()`, and `Karton::init()` clears a
-  stale block left by a crashed instance. Because a blocking libvirt read can
-  keep the GUI thread from ever reaching `aboutToQuit`, `main.cpp` installs a
-  termination handler: SIGTERM/SIGINT/SIGHUP wake a separate thread that asks
-  the event loop to quit, waits three seconds and then unblocks the shortcuts
-  and `_Exit(0)` itself. Never SIGKILL a Karton test instance while a viewer is
-  open (no cleanup can run); send SIGTERM and let the handler exit it.
+- KWin still eats some window shortcuts such as Alt+F4 even with the inhibitor
+  protocol, so `Karton::updateGlobalShortcutsBlock()` also calls kglobalaccel
+  `blockGlobalShortcuts(true)` while the pointer is over the guest. That state
+  is session-global: `Karton::releaseGlobalShortcuts()` clears it from
+  `aboutToQuit`/the destructor, `Karton::init()` clears a stale block, and
+  `main.cpp` handles SIGTERM/SIGINT/SIGHUP in a watchdog thread that unblocks
+  shortcuts and exits if the GUI thread is stuck. Never SIGKILL a test instance
+  with a viewer open; use SIGTERM.
 - `DomainViewer::updateDisplayResolution()` calls
   `spice_main_channel_update_display()` with the complete viewer area in
   device pixels on page resize and when the SPICE agent connects; it enables
@@ -893,9 +887,9 @@ Karton style; do not invent a separate layout for a new screen.
   and uploads only the damaged rectangles recorded by the display-invalidate
   handler; overlapping rectangles are merged, and above three rectangles their
   bounding rectangle is uploaded so one frame does not issue a dozen
-  `glTexSubImage2D` calls. The texture receives snapshots of those rectangles
-  only, so an
-  ordinary frame never copies the whole surface. The whole surface is uploaded
+  `glTexSubImage2D` calls. A preview-only or minimized
+  window defers conversion (`setFrameConversionEager(false)`) until
+  `currentFrame()` consumes a frame. The whole surface is uploaded
   only on surface creation/resolution changes, when a full frame is flagged,
   when damage tracking overflows 16 rectangles, or when the damaged area is at
   least half of the surface. Do not go back to `createTextureFromImage()` per frame: it
@@ -975,7 +969,9 @@ Karton style; do not invent a separate layout for a new screen.
   displays use `PrimarySurfaceRenderer`. `GlScanoutRenderer` imports the
   scanout dmabuf through EGL (including DRM modifiers from
   `spice_display_channel_get_gl_scanout2()`) and performs all EGL/GL teardown on
-  the render thread (`releaseResources()`), never in `detach()`.
+  the render thread (`releaseResources()`), never in `detach()`. It keeps the
+  EGLImage while the guest draws into the same dma-buf (identity from `fstat`
+  plus format, stride and offset).
 - Suspend/undefine/define events can arrive while a QML page is open; check for
   valid domain pointers and handle missing files gracefully.
 

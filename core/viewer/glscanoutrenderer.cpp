@@ -4,6 +4,7 @@
 
 #include "viewer/glscanoutrenderer.h"
 
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <QByteArray>
@@ -30,6 +31,21 @@ bool hasEglExtension(EGLDisplay display, const char *extension)
     return haystack.contains(extension);
 }
 } // namespace
+
+bool GlScanoutRenderer::Scanout::sameBuffer(const Scanout &other) const
+{
+    if (!enabled || !other.enabled || numPlanes != other.numPlanes || width != other.width || height != other.height || format != other.format
+        || modifier != other.modifier || y0top != other.y0top) {
+        return false;
+    }
+    for (int plane = 0; plane < numPlanes; ++plane) {
+        if (inode[plane] == 0 || inode[plane] != other.inode[plane] || dev[plane] != other.dev[plane] || offset[plane] != other.offset[plane]
+            || stride[plane] != other.stride[plane]) {
+            return false;
+        }
+    }
+    return true;
+}
 
 void GlScanoutRenderer::Scanout::closeFds()
 {
@@ -115,6 +131,11 @@ void GlScanoutRenderer::handleGlScanout(SpiceDisplayChannel *channel)
                     queueDisabledScanout();
                     return;
                 }
+                struct stat identity = {};
+                if (fstat(frame.fds[i], &identity) == 0) {
+                    frame.dev[i] = quint64(identity.st_dev);
+                    frame.inode[i] = quint64(identity.st_ino);
+                }
             }
         }
         if (frame.fds[0] < 0) {
@@ -140,6 +161,11 @@ void GlScanoutRenderer::handleGlScanout(SpiceDisplayChannel *channel)
             qCWarning(KARTON_DEBUG) << "Failed to duplicate GL scanout fd";
             queueDisabledScanout();
             return;
+        }
+        struct stat identity = {};
+        if (fstat(frame.fds[0], &identity) == 0) {
+            frame.dev[0] = quint64(identity.st_dev);
+            frame.inode[0] = quint64(identity.st_ino);
         }
         queueScanout(frame);
         return;
@@ -208,6 +234,23 @@ void GlScanoutRenderer::resetContextState()
     m_reimportRequired = m_currentScanout.enabled && m_currentScanout.fds[0] >= 0;
 }
 
+void GlScanoutRenderer::logScanoutStats()
+{
+    if (!m_statsElapsed.isValid()) {
+        m_statsElapsed.start();
+        return;
+    }
+    const qint64 elapsed = m_statsElapsed.elapsed();
+    if (elapsed < 5000) {
+        return;
+    }
+    const double seconds = elapsed / 1000.0;
+    qCInfo(KARTON_DEBUG) << "SPICE GL scanout:" << qRound(m_frames / seconds) << "frames/s," << qRound(m_imports / seconds * 100.0) / 100.0 << "EGL imports/s";
+    m_statsElapsed.restart();
+    m_frames = 0;
+    m_imports = 0;
+}
+
 void GlScanoutRenderer::processPendingScanout()
 {
     Scanout pending;
@@ -236,6 +279,17 @@ void GlScanoutRenderer::processPendingScanout()
     }
 
     if (havePending) {
+        ++m_frames;
+        // virtio-gpu guests normally render into the buffer that is already
+        // imported. The EGLImage then still references the live dma-buf, so
+        // rebuilding it on every frame only costs a create/destroy pair.
+        if (m_eglImage != EGL_NO_IMAGE_KHR && m_hasImage && pending.sameBuffer(m_currentScanout)) {
+            pending.closeFds();
+            m_y0top = pending.y0top;
+            logScanoutStats();
+            return;
+        }
+
         // The EGL image references the old dmabuf, so drop it before closing
         // the old descriptors.
         clearEGLImage();
@@ -247,15 +301,19 @@ void GlScanoutRenderer::processPendingScanout()
         if (!m_currentScanout.enabled) {
             deleteTexture();
             m_hasImage = false;
+            logScanoutStats();
             return;
         }
+        ++m_imports;
         if (!importScanout(m_currentScanout)) {
             clearEGLImage();
             deleteTexture();
             m_hasImage = false;
+            logScanoutStats();
             return;
         }
         m_hasImage = true;
+        logScanoutStats();
         return;
     }
 

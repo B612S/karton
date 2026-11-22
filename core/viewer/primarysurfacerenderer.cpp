@@ -316,7 +316,9 @@ void PrimarySurfaceRenderer::detach()
     m_frame = QImage();
     m_frameUpdated = false;
     m_dirtyRects.clear();
+    m_pendingDamage = QRegion();
     m_fullFrameDirty = true;
+    m_eagerConversion = true;
     // The scene-graph node owns the texture; it is deleted together with the
     // node on the render thread.
     m_frameTexture = nullptr;
@@ -350,8 +352,6 @@ void PrimarySurfaceRenderer::display_primary_create_callback(SpiceChannel *chann
     qCInfo(KARTON_DEBUG) << "SPICE: primary surface received! size:" << width << "x" << height << "format:" << format;
 
     bool sizeChanged = false;
-    QElapsedTimer copyTimer;
-    copyTimer.start();
     {
         QMutexLocker locker(&self->m_frameLock);
         const QSize oldSize(self->m_imageWidth, self->m_imageHeight);
@@ -359,6 +359,11 @@ void PrimarySurfaceRenderer::display_primary_create_callback(SpiceChannel *chann
         self->m_frameStride = stride;
         self->m_frameFormat = format;
         self->m_frame = QImage();
+        self->m_frameUpdated = true;
+        // A new surface invalidates every pixel of the texture.
+        self->m_fullFrameDirty = true;
+        self->m_dirtyRects.clear();
+        self->m_pendingDamage = QRegion();
 
         if (isSupportedSurfaceFormat(format) && width > 0 && height > 0 && imgdata) {
             self->m_imageWidth = width;
@@ -367,7 +372,10 @@ void PrimarySurfaceRenderer::display_primary_create_callback(SpiceChannel *chann
             // texture upload does not need a conversion pass.
             self->m_frame = QImage(width, height, QImage::Format_ARGB32);
             if (!self->m_frame.isNull()) {
-                copySurfaceRegion(self->m_frame, self->m_frameSource, stride, format, 0, 0, width, height);
+                self->m_pendingDamage = QRegion(QRect(0, 0, width, height));
+                if (self->m_eagerConversion) {
+                    self->convertPendingLocked();
+                }
             } else {
                 self->m_imageWidth = 0;
                 self->m_imageHeight = 0;
@@ -377,13 +385,8 @@ void PrimarySurfaceRenderer::display_primary_create_callback(SpiceChannel *chann
             self->m_imageWidth = 0;
             self->m_imageHeight = 0;
         }
-        self->m_frameUpdated = true;
-        // A new surface invalidates every pixel of the texture.
-        self->m_fullFrameDirty = true;
-        self->m_dirtyRects.clear();
         sizeChanged = oldSize != QSize(self->m_imageWidth, self->m_imageHeight);
     }
-    self->noteFrame(copyTimer.nsecsElapsed(), qint64(width) * height);
 
     if (sizeChanged) {
         Q_EMIT self->frameSizeChanged();
@@ -397,30 +400,21 @@ void PrimarySurfaceRenderer::display_invalidate_callback(SpiceDisplayChannel *ch
 
     auto *self = static_cast<PrimarySurfaceRenderer *>(user_data);
     bool updated = false;
-    QRect copied;
-    QElapsedTimer copyTimer;
-    copyTimer.start();
     {
         QMutexLocker locker(&self->m_frameLock);
         if (self->m_frameSource && !self->m_frame.isNull()) {
-            updated = copySurfaceRegion(self->m_frame, self->m_frameSource, self->m_frameStride, self->m_frameFormat, x, y, width, height, &copied);
-        }
-        if (updated) {
-            self->m_frameUpdated = true;
-            if (!self->m_fullFrameDirty) {
-                self->m_dirtyRects.append(copied);
-                // Keep the tracking cheap; past a handful of rectangles the
-                // upload is better done as one full image.
-                if (self->m_dirtyRects.size() > 16) {
-                    self->m_dirtyRects.clear();
-                    self->m_fullFrameDirty = true;
-                }
+            const QRect damaged = QRect(x, y, width, height).intersected(QRect(QPoint(0, 0), self->m_frame.size()));
+            if (!damaged.isEmpty()) {
+                self->m_pendingDamage += damaged;
+                self->m_frameUpdated = true;
+                // A preview or minimized window only needs a converted frame
+                // when it consumes one; convertPendingLocked() runs then.
+                updated = self->m_eagerConversion ? self->convertPendingLocked() : true;
             }
         }
     }
 
     if (updated) {
-        self->noteFrame(copyTimer.nsecsElapsed(), qint64(width) * height);
         Q_EMIT self->frameReady();
     }
 }
@@ -438,6 +432,7 @@ void PrimarySurfaceRenderer::display_primary_destroy_callback(SpiceDisplayChanne
     self->m_frame = QImage();
     self->m_frameUpdated = false;
     self->m_dirtyRects.clear();
+    self->m_pendingDamage = QRegion();
     self->m_fullFrameDirty = true;
 }
 
@@ -447,9 +442,20 @@ QSize PrimarySurfaceRenderer::frameSize() const
     return QSize(m_imageWidth, m_imageHeight);
 }
 
-QImage PrimarySurfaceRenderer::currentFrame() const
+QImage PrimarySurfaceRenderer::currentFrame()
 {
     QMutexLocker locker(&m_frameLock);
+    if (m_frame.isNull() && m_pendingDamage.isEmpty()) {
+        return {};
+    }
+    convertPendingLocked();
+    if (!m_eagerConversion) {
+        // Nothing renders this window, so the upload rectangles would only
+        // grow until the window becomes visible again; a fresh texture is
+        // needed at that point anyway.
+        m_dirtyRects.clear();
+        m_fullFrameDirty = true;
+    }
     if (m_frame.isNull()) {
         return {};
     }
@@ -458,6 +464,74 @@ QImage PrimarySurfaceRenderer::currentFrame() const
     // Converting also detaches the pixels, so the returned image does not
     // share data with the frame this renderer keeps writing to.
     return m_frame.convertToFormat(QImage::Format_RGB32);
+}
+
+bool PrimarySurfaceRenderer::convertPendingLocked()
+{
+    if (m_pendingDamage.isEmpty()) {
+        return false;
+    }
+    QRegion pending = m_pendingDamage;
+    m_pendingDamage = QRegion();
+    if (m_frame.isNull() || !m_frameSource) {
+        return false;
+    }
+
+    const QRect surface(QPoint(0, 0), m_frame.size());
+    QElapsedTimer timer;
+    timer.start();
+    qint64 pixels = 0;
+    for (const QRect &rect : std::as_const(pending)) {
+        const QRect clipped = rect.intersected(surface);
+        if (clipped.isEmpty()) {
+            continue;
+        }
+        QRect copied;
+        if (copySurfaceRegion(m_frame, m_frameSource, m_frameStride, m_frameFormat, clipped.x(), clipped.y(), clipped.width(), clipped.height(), &copied)) {
+            m_dirtyRects.append(copied);
+            pixels += qint64(copied.width()) * copied.height();
+        }
+    }
+    // Do not let a window that only previews accumulate rectangles forever.
+    if (m_dirtyRects.size() > 64) {
+        m_dirtyRects.clear();
+        m_fullFrameDirty = true;
+    }
+    m_frameUpdated = true;
+    noteFrame(timer.nsecsElapsed(), pixels);
+    return true;
+}
+
+void PrimarySurfaceRenderer::setFrameConversionEager(bool eager)
+{
+    if (m_eagerConversion == eager) {
+        return;
+    }
+    m_eagerConversion = eager;
+    if (!eager) {
+        return;
+    }
+    // The window is visible again: convert what piled up while it was hidden.
+    bool converted = false;
+    {
+        QMutexLocker locker(&m_frameLock);
+        converted = convertPendingLocked();
+    }
+    if (converted) {
+        Q_EMIT frameReady();
+    }
+}
+
+void PrimarySurfaceRenderer::convertPendingAndNotify()
+{
+    bool converted = false;
+    {
+        QMutexLocker locker(&m_frameLock);
+        converted = convertPendingLocked();
+    }
+    if (converted) {
+        Q_EMIT frameReady();
+    }
 }
 
 QSGNode *PrimarySurfaceRenderer::updatePaintNode(QQuickWindow *window, QSGNode *oldNode, const QRectF &bounds)
@@ -478,6 +552,14 @@ QSGNode *PrimarySurfaceRenderer::updatePaintNode(QQuickWindow *window, QSGNode *
             // texture it owns); drop the dangling pointer.
             m_frameTexture = nullptr;
             return nullptr;
+        }
+        if (!m_pendingDamage.isEmpty()) {
+            // A visible window asked for a frame but the conversion was
+            // deferred (it is still marked preview/minimized). The surface
+            // belongs to the GUI thread, so convert there and render again
+            // instead of uploading uninitialised pixels from here.
+            QMetaObject::invokeMethod(this, &PrimarySurfaceRenderer::convertPendingAndNotify, Qt::QueuedConnection);
+            return node;
         }
         if (m_frameUpdated || !node || !node->texture()) {
             frameSize = m_frame.size();

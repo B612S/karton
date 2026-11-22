@@ -99,6 +99,8 @@ DomainViewer::DomainViewer(QQuickItem *parent)
         m_xmlSkipPrefetch = true;
         setupSpiceSession();
     });
+
+    connect(this, &QQuickItem::windowChanged, this, &DomainViewer::handleWindowChanged);
 }
 
 DomainViewer::~DomainViewer()
@@ -156,9 +158,35 @@ void DomainViewer::setPreviewOnly(bool previewOnly)
     m_xmlSkipPrefetch = false;
     cancelDomainXmlWait();
     Q_EMIT previewOnlyChanged();
+    updateRendererEagerness();
     if (isComponentComplete() && m_domain) {
         setupSpiceSession();
     }
+}
+
+void DomainViewer::handleWindowChanged(QQuickWindow *window)
+{
+    if (m_windowVisibilityConnection) {
+        disconnect(m_windowVisibilityConnection);
+        m_windowVisibilityConnection = {};
+    }
+    if (window) {
+        m_windowVisibilityConnection = connect(window, &QWindow::visibilityChanged, this, &DomainViewer::updateRendererEagerness);
+    }
+    updateRendererEagerness();
+}
+
+void DomainViewer::updateRendererEagerness()
+{
+    if (!m_renderer) {
+        return;
+    }
+    // A minimized viewer does not present frames either. Qt may still let the
+    // SPICE session deliver them, so the renderer must not convert every frame
+    // just to throw it away; a preview window is always deferred.
+    const QQuickWindow *viewerWindow = window();
+    const bool minimized = viewerWindow && viewerWindow->visibility() == QWindow::Minimized;
+    m_renderer->setFrameConversionEager(!m_previewOnly && !minimized);
 }
 
 void DomainViewer::componentComplete()
@@ -716,6 +744,7 @@ void DomainViewer::attachDisplayChannel(SpiceChannel *channel)
     });
 
     m_renderer->attach(SPICE_DISPLAY_CHANNEL(channel));
+    updateRendererEagerness();
     if (m_previewOnly) {
         m_previewRetryTimer.stop();
         m_previewWatchdog.stop();

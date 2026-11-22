@@ -10,6 +10,7 @@
 #include <QImage>
 #include <QMutex>
 #include <QRect>
+#include <QRegion>
 #include <QVector>
 
 class QSGTexture;
@@ -33,7 +34,9 @@ public:
 
     QSize frameSize() const override;
 
-    QImage currentFrame() const override;
+    QImage currentFrame() override;
+
+    void setFrameConversionEager(bool eager) override;
 
 private:
     static void
@@ -47,6 +50,13 @@ private:
     // compose their animations in software and show up as a low frame rate
     // here while the copy stays short.
     void noteFrame(qint64 copyNs, qint64 pixels);
+
+    // Converts the damage that accumulated while the window was not rendering
+    // into m_frame. Must be called with m_frameLock held.
+    bool convertPendingLocked();
+
+    // GUI-thread slot for a conversion requested from updatePaintNode().
+    void convertPendingAndNotify();
     QElapsedTimer m_statsElapsed;
     quint64 m_statsFrames = 0;
     quint64 m_statsPixels = 0;
@@ -69,7 +79,12 @@ private:
     // renderer keeps one persistent RHI texture and uploads only these, so a
     // frame no longer reallocates and re-uploads the whole surface.
     QVector<QRect> m_dirtyRects;
+    // Rectangles that still have to be copied out of the SPICE surface. They
+    // are only converted when the window actually consumes a frame, so a
+    // preview window does not pay for every guest frame.
+    QRegion m_pendingDamage;
     bool m_fullFrameDirty = true;
+    bool m_eagerConversion = true;
     // Owned by the scene-graph node (setOwnsTexture); nulled when the node or
     // the scene graph goes away.
     QSGTexture *m_frameTexture = nullptr;

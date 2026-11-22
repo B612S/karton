@@ -41,9 +41,18 @@ public:
 
     // CPU copy of the latest frame when the backend has one. GPU scanout
     // renderers return a null image and the caller falls back to a grab.
-    virtual QImage currentFrame() const
+    virtual QImage currentFrame()
     {
         return {};
+    }
+
+    // A visible viewer needs converted frames as they arrive. A preview-only or
+    // minimized window can defer the pixel conversion until it actually
+    // consumes a frame, which keeps a hidden SPICE session from burning CPU on
+    // every guest frame. Renderers without a CPU copy ignore this.
+    virtual void setFrameConversionEager(bool eager)
+    {
+        Q_UNUSED(eager);
     }
 
 Q_SIGNALS:
