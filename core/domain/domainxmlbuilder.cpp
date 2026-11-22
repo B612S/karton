@@ -211,6 +211,11 @@ QString DomainXmlBuilder::generateXML(const DomainConfig *config, bool remote)
 
     // devices->graphics element
     const bool enableAccel3d = config->enableAccel3d();
+    // The Windows SPICE agent ignores the side/extra mouse buttons. Let the
+    // server use the tablet for them instead, otherwise back/forward buttons
+    // never reach the guest.
+    const bool windowsGuest =
+        config->shortOsId().startsWith(QStringLiteral("win"), Qt::CaseInsensitive) || osId.contains(QStringLiteral("microsoft.com/win"), Qt::CaseInsensitive);
     addGraphicsDevices(document,
                        devices,
                        {.type = QStringLiteral("spice"),
@@ -219,7 +224,8 @@ QString DomainXmlBuilder::generateXML(const DomainConfig *config, bool remote)
                         .address = remote ? QStringLiteral("0.0.0.0") : QString(),
                         .password = remote ? QUuid::createUuid().toString(QUuid::WithoutBraces) : QString(),
                         .glEnable = enableAccel3d,
-                        .uuid = uuidString});
+                        .uuid = uuidString,
+                        .mouseServerMode = windowsGuest});
 
     // devices->sound element
     addSoundDevices(document, devices, {.model = QStringLiteral("ich9"), .id = QStringLiteral("1")});
@@ -391,6 +397,12 @@ void DomainXmlBuilder::addGraphicsDevices(QDomDocument &document, QDomElement &p
     }
 
     addElementWithAttributes(document, graphics, QStringLiteral("listen"), QString(), listen);
+
+    if (config.mouseServerMode) {
+        QMap<QString, QString> mouse;
+        mouse[QStringLiteral("mode")] = QStringLiteral("server");
+        addElementWithAttributes(document, graphics, QStringLiteral("mouse"), QString(), mouse);
+    }
 
     if (config.glEnable) {
         QMap<QString, QString> gl;

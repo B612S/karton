@@ -25,6 +25,7 @@ private Q_SLOTS:
     void readerParsesSecureBoot();
     void readerDetectsGraphics();
     void builderGeneratesUefiRawDomain();
+    void builderUsesTabletMouseForWindows();
     void builderCanDisableNetwork();
     void builderUpdatesHardwareAndPreservesMetadata();
     void builderLeavesUnknownStorageUntouched();
@@ -295,6 +296,46 @@ void DomainXmlTest::builderGeneratesUefiRawDomain()
     QVERIFY2(secureDocument.setContent(secureXml), qPrintable(secureXml));
     const QDomElement secureOs = secureDocument.documentElement().firstChildElement(QStringLiteral("os"));
     QCOMPARE(secureOs.firstChildElement(QStringLiteral("loader")).attribute(QStringLiteral("secure")), QStringLiteral("yes"));
+}
+
+void DomainXmlTest::builderUsesTabletMouseForWindows()
+{
+    OsinfoConfig osinfo;
+    const QStringList oses = osinfo.osList();
+    if (oses.isEmpty()) {
+        QSKIP("No libosinfo database available");
+    }
+    QString windowsId;
+    for (const QString &id : oses) {
+        if (id.startsWith(QStringLiteral("win"), Qt::CaseInsensitive)) {
+            windowsId = id;
+            break;
+        }
+    }
+    if (windowsId.isEmpty()) {
+        QSKIP("No Windows OS in the libosinfo database");
+    }
+
+    DomainConfig::DomainConfigData data;
+    data.name = QStringLiteral("test");
+    data.shortOsId = windowsId;
+    data.maxRam = 1;
+    data.cpus = 1;
+    data.maxDiskStorage = 1;
+    data.virtualDiskPath = QStringLiteral("/tmp/test.qcow2");
+    data.networkModel = QStringLiteral("none");
+    data.enableAccel3d = false;
+
+    DomainConfig config(data);
+    DomainXmlBuilder builder;
+    const QString xml = builder.generateXML(&config);
+    QVERIFY2(!xml.isEmpty(), "generateXML() returned an empty document");
+
+    QDomDocument document;
+    QVERIFY2(document.setContent(xml), qPrintable(xml));
+    const QDomElement graphics = document.documentElement().firstChildElement(QStringLiteral("devices")).firstChildElement(QStringLiteral("graphics"));
+    QVERIFY(!graphics.isNull());
+    QCOMPARE(graphics.firstChildElement(QStringLiteral("mouse")).attribute(QStringLiteral("mode")), QStringLiteral("server"));
 }
 
 void DomainXmlTest::builderCanDisableNetwork()
