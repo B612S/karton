@@ -23,7 +23,6 @@
 #include <QStringConverter>
 #include <QTimer>
 
-#include <atomic>
 #include <memory>
 
 class QSGSimpleTextureNode;
@@ -182,12 +181,7 @@ Q_SIGNALS:
 private Q_SLOTS:
     void handleRendererFrameSizeChanged();
     void updateLivePreview();
-    // Tells the renderer whether this window will present the frames it gets:
-    // a preview or minimized window defers the pixel conversion.
-    void updateRendererEagerness();
-    void handleWindowChanged(QQuickWindow *window);
     void applyGuestCursor();
-    void updateMouseMode();
     void applyDisplayResolution();
 
 private:
@@ -220,7 +214,6 @@ private:
     static void cursorSetCallback(SpiceCursorChannel *channel, gint width, gint height, gint hotX, gint hotY, gpointer rgba, gpointer userData);
     static void cursorMoveCallback(SpiceCursorChannel *channel, gint x, gint y, gpointer userData);
     static void mainAgentUpdateCallback(SpiceMainChannel *channel, gpointer userData);
-    static void mouseModeUpdatedCallback(SpiceMainChannel *channel, GParamSpec *pspec, gpointer userData);
     static void cursorHideCallback(SpiceCursorChannel *channel, gpointer userData);
     static void cursorResetCallback(SpiceCursorChannel *channel, gpointer userData);
     void clearCursor();
@@ -320,15 +313,9 @@ private:
     QPoint m_cursorPosition;
     QPoint m_cursorHotspot;
     bool m_cursorVisible = false;
-    bool m_hasCursorPosition = false;
     bool m_cursorTextureDirty = true;
     QPointF m_cursorPaintPosition;
     bool m_hasCursorPaintPosition = false;
-    // Server mode reports the guest cursor position; client mode does not.
-    // Written on the GUI thread, read by updatePaintNode() on the render
-    // thread to decide whether to paint the cursor overlay or to rely on the
-    // host cursor.
-    std::atomic_bool m_serverMouseMode{false};
     bool m_pointerInside = false;
     QSize m_lastDisplayResolution;
     // Coalesces the geometry burst while a window is restored from fullscreen:
@@ -357,7 +344,6 @@ private:
     int m_previewBlankFrames = 0;
     bool m_previewStopped = false;
     bool m_disconnecting = false;
-    QMetaObject::Connection m_windowVisibilityConnection;
 
     static constexpr quint32 x11_wayland_evdev_offset = 8;
     // difference of 8 between x11 wayland.

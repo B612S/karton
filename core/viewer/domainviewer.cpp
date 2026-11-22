@@ -35,7 +35,6 @@
 #include "viewer/glscanoutrenderer.h"
 #include "viewer/primarysurfacerenderer.h"
 
-#include "util/calltimer.h"
 #include "util/evdev_to_xtkbd_map.h"
 
 DomainViewer::DomainViewer(QQuickItem *parent)
@@ -99,8 +98,6 @@ DomainViewer::DomainViewer(QQuickItem *parent)
         m_xmlSkipPrefetch = true;
         setupSpiceSession();
     });
-
-    connect(this, &QQuickItem::windowChanged, this, &DomainViewer::handleWindowChanged);
 }
 
 DomainViewer::~DomainViewer()
@@ -158,35 +155,9 @@ void DomainViewer::setPreviewOnly(bool previewOnly)
     m_xmlSkipPrefetch = false;
     cancelDomainXmlWait();
     Q_EMIT previewOnlyChanged();
-    updateRendererEagerness();
     if (isComponentComplete() && m_domain) {
         setupSpiceSession();
     }
-}
-
-void DomainViewer::handleWindowChanged(QQuickWindow *window)
-{
-    if (m_windowVisibilityConnection) {
-        disconnect(m_windowVisibilityConnection);
-        m_windowVisibilityConnection = {};
-    }
-    if (window) {
-        m_windowVisibilityConnection = connect(window, &QWindow::visibilityChanged, this, &DomainViewer::updateRendererEagerness);
-    }
-    updateRendererEagerness();
-}
-
-void DomainViewer::updateRendererEagerness()
-{
-    if (!m_renderer) {
-        return;
-    }
-    // A minimized viewer does not present frames either. Qt may still let the
-    // SPICE session deliver them, so the renderer must not convert every frame
-    // just to throw it away; a preview window is always deferred.
-    const QQuickWindow *viewerWindow = window();
-    const bool minimized = viewerWindow && viewerWindow->visibility() == QWindow::Minimized;
-    m_renderer->setFrameConversionEager(!m_previewOnly && !minimized);
 }
 
 void DomainViewer::componentComplete()
@@ -199,10 +170,6 @@ void DomainViewer::componentComplete()
 
 bool DomainViewer::setupSpiceSession()
 {
-    // Runs on the GUI thread whenever a viewer/preview (re)connects. Reading
-    // the endpoint from libvirt can block while the domain is still starting,
-    // so log it when that freezes the window.
-    ScopedCallTimer timer("DomainViewer::setupSpiceSession");
     if (m_previewOnly && m_previewStopped) {
         return false;
     }
@@ -446,7 +413,6 @@ void DomainViewer::disconnectFromSpice()
         m_detachedRenderer = std::move(m_renderer);
     }
 
-    m_serverMouseMode.store(false, std::memory_order_relaxed);
     clearCursor();
     update();
 
@@ -670,8 +636,6 @@ void DomainViewer::channel_new_callback(SpiceSession *session, SpiceChannel *cha
         qCInfo(KARTON_DEBUG) << "SPICE main channel connected";
         spice_channel_connect(channel);
         item->m_main_channel = SPICE_MAIN_CHANNEL(channel);
-        g_signal_connect(channel, "notify::mouse-mode", G_CALLBACK(mouseModeUpdatedCallback), item);
-        item->updateMouseMode();
         if (!item->m_previewOnly) {
             g_signal_connect(channel, "main-agent-update", G_CALLBACK(mainAgentUpdateCallback), item);
             item->m_clipboard->attach(item->m_session, SPICE_MAIN_CHANNEL(channel));
@@ -747,7 +711,6 @@ void DomainViewer::attachDisplayChannel(SpiceChannel *channel)
     });
 
     m_renderer->attach(SPICE_DISPLAY_CHANNEL(channel));
-    updateRendererEagerness();
     if (m_previewOnly) {
         m_previewRetryTimer.stop();
         m_previewWatchdog.stop();
@@ -796,7 +759,6 @@ void DomainViewer::cursorMoveCallback(SpiceCursorChannel *channel, gint x, gint 
     {
         QMutexLocker locker(&item->m_cursorMutex);
         item->m_cursorPosition = QPoint(x, y);
-        item->m_hasCursorPosition = true;
     }
     item->update();
 }
@@ -832,18 +794,6 @@ void DomainViewer::cursorHideCallback(SpiceCursorChannel *channel, gpointer user
 
 void DomainViewer::applyGuestCursor()
 {
-    if (m_serverMouseMode.load(std::memory_order_relaxed)) {
-        // Server mode reports the guest cursor with cursor-move and paints it
-        // in updatePaintNode(). Hide the host pointer over the display so the
-        // overlay is the only visible cursor and clicks land where it is.
-        if (m_pointerInside || m_pointerGrabbed) {
-            setCursor(Qt::BlankCursor);
-        } else {
-            unsetCursor();
-        }
-        return;
-    }
-
     QImage image;
     QPoint hotspot;
     {
@@ -875,15 +825,10 @@ void DomainViewer::clearCursor()
         QMutexLocker locker(&m_cursorMutex);
         m_cursorImage = QImage();
         m_cursorVisible = false;
-        m_hasCursorPosition = false;
         m_cursorTextureDirty = true;
         m_hasCursorPaintPosition = false;
     }
-    if (m_serverMouseMode.load(std::memory_order_relaxed)) {
-        // The overlay is gone, but the host pointer must stay hidden while it
-        // is over the guest.
-        applyGuestCursor();
-    } else if (!m_pointerGrabbed) {
+    if (!m_pointerGrabbed) {
         unsetCursor();
     }
     update();
@@ -983,7 +928,6 @@ void DomainViewer::sessionDisconnectedCallback(SpiceSession *session, gpointer u
     item->m_inputs_channel = nullptr;
     item->m_recordChannel = nullptr;
     item->m_current_button_mask = 0;
-    item->m_serverMouseMode.store(false, std::memory_order_relaxed);
     item->releasePointerGrab();
     item->clearCursor();
     if (item->m_agentConnected) {
@@ -1220,70 +1164,15 @@ QSGNode *DomainViewer::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         m_displayNode = nullptr;
     }
 
-    // In client mouse mode the guest cursor shape is installed as the actual
-    // host cursor in applyGuestCursor(), so no overlay is painted. Server mode
-    // reports the guest cursor position with cursor-move and does not follow
-    // the host pointer; draw the shape at that position instead. The host
-    // cursor is blanked while it is over the display, so the overlay is the
-    // only visible pointer and clicks land where it is.
-    const bool serverMouseMode = m_serverMouseMode.load(std::memory_order_relaxed);
-    QImage cursorImage;
-    QPoint cursorPosition;
-    QPoint hotspot;
-    bool cursorVisible = false;
-    bool hasCursorPosition = false;
-    bool textureDirty = false;
-    if (serverMouseMode) {
-        QMutexLocker locker(&m_cursorMutex);
-        cursorImage = m_cursorImage;
-        cursorPosition = m_cursorPosition;
-        hotspot = m_cursorHotspot;
-        cursorVisible = m_cursorVisible;
-        hasCursorPosition = m_hasCursorPosition;
-        textureDirty = m_cursorTextureDirty;
-        m_cursorTextureDirty = false;
+    // The guest cursor is installed as the actual host cursor in
+    // applyGuestCursor(). Do not also paint a scene-graph cursor: in client
+    // mouse mode SPICE sends no cursor position, so the overlay would be
+    // stranded at a stale position while the host cursor follows the pointer.
+    if (m_cursorNode) {
+        root->removeChildNode(m_cursorNode);
+        delete m_cursorNode;
+        m_cursorNode = nullptr;
     }
-
-    if (!serverMouseMode || !cursorVisible || cursorImage.isNull() || !hasCursorPosition) {
-        if (m_cursorNode) {
-            root->removeChildNode(m_cursorNode);
-            delete m_cursorNode;
-            m_cursorNode = nullptr;
-        }
-        return root;
-    }
-
-    if (!m_cursorNode) {
-        m_cursorNode = new QSGSimpleTextureNode;
-        m_cursorNode->setOwnsTexture(true);
-        root->appendChildNode(m_cursorNode);
-    } else {
-        // Keep the cursor above the display node, which may have been
-        // re-appended above it while the frame was rebuilt.
-        if (m_cursorNode->parent()) {
-            m_cursorNode->parent()->removeChildNode(m_cursorNode);
-        }
-        root->appendChildNode(m_cursorNode);
-    }
-
-    if (textureDirty || !m_cursorNode->texture()) {
-        QSGTexture *texture = window()->createTextureFromImage(cursorImage);
-        if (!texture) {
-            root->removeChildNode(m_cursorNode);
-            delete m_cursorNode;
-            m_cursorNode = nullptr;
-            return root;
-        }
-        m_cursorNode->setTexture(texture);
-    }
-
-    const QSize frameSize = m_renderer ? m_renderer->frameSize() : QSize();
-    const qreal scaleX = (frameSize.width() > 0 && width() > 0) ? width() / frameSize.width() : 1.0;
-    const qreal scaleY = (frameSize.height() > 0 && height() > 0) ? height() / frameSize.height() : 1.0;
-    const qreal x = (cursorPosition.x() - hotspot.x()) * scaleX;
-    const qreal y = (cursorPosition.y() - hotspot.y()) * scaleY;
-    m_cursorNode->setRect(QRectF(x, y, cursorImage.width() * scaleX, cursorImage.height() * scaleY));
-    m_cursorNode->setFiltering(QSGTexture::Linear);
 
     return root;
 }
@@ -1707,7 +1596,7 @@ void DomainViewer::releasePointerGrab()
     bool keepBlank = false;
     {
         QMutexLocker locker(&m_cursorMutex);
-        keepBlank = m_pointerInside && (m_cursorVisible || m_serverMouseMode.load(std::memory_order_relaxed));
+        keepBlank = m_pointerInside && m_cursorVisible;
     }
     if (keepBlank) {
         setCursor(Qt::BlankCursor);
@@ -1726,35 +1615,6 @@ int DomainViewer::mouseMode() const
     int mode = SPICE_MOUSE_MODE_CLIENT;
     g_object_get(m_main_channel, "mouse-mode", &mode, nullptr);
     return mode;
-}
-
-void DomainViewer::updateMouseMode()
-{
-    const bool server = mouseMode() == SPICE_MOUSE_MODE_SERVER;
-    if (m_serverMouseMode.exchange(server) == server) {
-        return;
-    }
-    qCInfo(KARTON_DEBUG) << "SPICE mouse mode:" << (server ? "server" : "client");
-    if (!server && m_pointerGrabbed) {
-        releasePointerGrab();
-    }
-    // The two modes report the cursor differently: client mode follows the
-    // host pointer, server mode follows the cursor channel. Do not carry an
-    // accumulated position across the switch.
-    m_hasVirtualPointerPosition = false;
-    {
-        QMutexLocker locker(&m_cursorMutex);
-        m_hasCursorPosition = false;
-    }
-    applyGuestCursor();
-    update();
-}
-
-void DomainViewer::mouseModeUpdatedCallback(SpiceMainChannel *channel, GParamSpec *pspec, gpointer userData)
-{
-    Q_UNUSED(channel);
-    Q_UNUSED(pspec);
-    static_cast<DomainViewer *>(userData)->updateMouseMode();
 }
 
 QPointF DomainViewer::guestPositionForLocal(const QPointF &position) const
@@ -1823,7 +1683,7 @@ void DomainViewer::updatePointer(const QPointF &position, int buttonMask)
     }
     updateCursorPaintPosition();
 
-    if (m_serverMouseMode.load(std::memory_order_relaxed)) {
+    if (mouseMode() == SPICE_MOUSE_MODE_SERVER) {
         // PS/2-style guests only understand relative motion. This also works
         // while the pointer is grabbed and the host cursor is outside the item.
         if (!qFuzzyIsNull(delta.x()) || !qFuzzyIsNull(delta.y())) {
@@ -1832,9 +1692,8 @@ void DomainViewer::updatePointer(const QPointF &position, int buttonMask)
         return;
     }
 
-    // Client mode is absolute by definition, even if a stale grab is still
-    // active from a mode switch or a previous server-mode session.
-    spice_inputs_channel_position(m_inputs_channel, qRound(guestPosition.x()), qRound(guestPosition.y()), 0, buttonMask);
+    const QPointF absolute = m_pointerGrabbed ? m_virtualPointerPosition : guestPosition;
+    spice_inputs_channel_position(m_inputs_channel, qRound(absolute.x()), qRound(absolute.y()), 0, buttonMask);
     // Do not repaint the scene graph here: the guest cursor is installed as
     // the host cursor, and repainting on every motion event at pointer rate
     // wasted GPU/CPU time (and caused needless present churn).
@@ -1942,9 +1801,6 @@ void DomainViewer::mouseMoveEvent(QMouseEvent *event)
     if (event->buttons() & Qt::RightButton) {
         buttonMask |= SPICE_MOUSE_BUTTON_MASK_RIGHT;
     }
-    // Keep the side/extra bits while the pointer moves with those buttons
-    // held; otherwise the next motion clears them and a drag with the
-    // back/forward button looks like a release.
     if (event->buttons() & Qt::BackButton) {
         buttonMask |= SPICE_MOUSE_BUTTON_MASK_SIDE;
     }
@@ -1978,11 +1834,7 @@ void DomainViewer::hoverEnterEvent(QHoverEvent *event)
     if (entered) {
         Q_EMIT pointerInsideChanged();
     }
-    if (m_serverMouseMode.load(std::memory_order_relaxed)) {
-        // The cursor overlay is the guest's pointer; the host pointer must not
-        // be visible next to it.
-        setCursor(Qt::BlankCursor);
-    } else if (haveImage) {
+    if (haveImage) {
         if (wantCursor) {
             applyGuestCursor();
         } else {
@@ -2035,12 +1887,7 @@ void DomainViewer::mousePressEvent(QMouseEvent *event)
         viewerWindow->raise();
         viewerWindow->requestActivate();
     }
-    // A pointer grab is only needed for server mouse mode, where motion is
-    // relative. In client mode it would hide the host cursor and make the
-    // floating toolbar and absolute pointer feel wrong.
-    if (m_serverMouseMode.load(std::memory_order_relaxed)) {
-        grabPointer();
-    }
+    grabPointer();
     forceActiveFocus();
 
     if (!inputsReady()) {

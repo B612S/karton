@@ -610,16 +610,13 @@ list in the root `CMakeLists.txt`, otherwise it will not be bundled.
   painted. There is one display node per renderer and one root node that owns
   it. Client mouse mode sends no SPICE `cursor-move` events, so the host cursor
   follows the local pointer instead of the initial `(0, 0)` cursor position.
-  Karton keeps generation in client mode. Side/extra buttons are sent
-  natively; on Windows they reach the guest as XBUTTON1/XBUTTON2 only when the
-  SPICE vdagent supports SBUTTON/EBUTTON (the maintained `vd_agent` v0.11+
-  maps them; `scripts/guests/windows/install.cmd` installs v0.13.0). Do not
-  switch Windows domains to server mouse mode: it makes the guest cursor move
-  relatively, the viewer has to hide the host pointer, and the fullscreen
-  toolbar becomes hard to use. Do not synthesize Alt+Left/Alt+Right either;
-  the native buttons must work. Domains with an explicit server-mode `<mouse>`
-  in their XML still get the overlay fallback: the viewer paints the guest
-  cursor at the reported `cursor-move` position and hides the host pointer.
+  Karton generates client mode only. Side/extra buttons are sent natively; on
+  Windows they reach the guest as XBUTTON1/XBUTTON2 only when the SPICE vdagent
+  supports SBUTTON/EBUTTON (the maintained `vd_agent` v0.11+ maps them;
+  `scripts/guests/windows/install.cmd` installs v0.13.0). Do not switch domains
+  to server mouse mode: it makes the guest cursor move relatively, the viewer
+  hides the host pointer, and the fullscreen toolbar becomes hard to use. Do
+  not synthesize Alt+Left/Alt+Right either; the native buttons must work.
 - The viewer's `DomainViewer` must receive keyboard focus after the window
   opens (`forceActiveFocus` in `VMViewerWindow.qml` and on click), and after
   toolbar/menu/dialog interaction. Scancodes are normalized to evdev by
@@ -693,35 +690,18 @@ list in the root `CMakeLists.txt`, otherwise it will not be bundled.
 - In client mouse mode the guest cursor is installed as the actual host cursor
   and no scene-graph overlay is painted, so pointer motion must not call
   `QQuickItem::update()`; doing so repainted the whole viewer at pointer rate.
-  In server mouse mode (external domains with an explicit `<mouse>` element)
-  the viewer paints the guest cursor overlay at the `cursor-move` position and
-  repaints on cursor events, not on host pointer motion. A guest `cursor-hide` blanks the host
-  cursor while the pointer is over the display instead of re-installing the
-  last shape: the guest draws its own cursor into the framebuffer in that case
-  (window dragging, full-screen video, xrdp/mstsc), and showing the stale host
-  cursor produced two visible mice.
+  A guest `cursor-hide` blanks the host cursor while the pointer is over the
+  display instead of re-installing the last shape: the guest draws its own
+  cursor into the framebuffer in that case (window dragging, full-screen video,
+  xrdp/mstsc), and showing the stale host cursor produced two visible mice.
 - `PrimarySurfaceRenderer` copies SPICE's primary framebuffer into an owned
-  `QImage`. The original buffer is unmapped by spice-gtk when the guest changes
-  resolution (notably while Windows boots); creating/using a texture from that
-  pointer on the render thread used to crash `QSGBatchRenderer::prepareRenderPass`.
-  It copies 32-bit xRGB/ARGB surfaces as BGRA rows into an `ARGB32` frame (the
-  RHI texture is `BGRA8`, so the GPU does the byte order conversion while
-  sampling) and expands 16-bit 555/565 surfaces through a 64K lookup table
-  instead of per-pixel arithmetic. Backends that cannot sample `BGRA8` get an
-  explicit `RGBA8888` conversion at upload time. The row stride is honoured for
-  damage copies. The renderer keeps one
-  persistent RHI texture (`SpiceFrameTexture`, owned by the scene-graph node)
-  and uploads only the damaged rectangles recorded by the display-invalidate
-  handler; overlapping rectangles are merged, and above three rectangles their
-  bounding rectangle is uploaded so one frame does not issue a dozen
-  `glTexSubImage2D` calls. A preview-only or minimized
-  window defers conversion (`setFrameConversionEager(false)`) until
-  `currentFrame()` consumes a frame. The whole surface is uploaded
-  only on surface creation/resolution changes, when a full frame is flagged,
-  when damage tracking overflows 16 rectangles, or when the damaged area is at
-  least half of the surface. Do not go back to `createTextureFromImage()` per frame: it
-  allocates and uploads the complete 8–20 MiB surface on every guest frame and
-  was the boot-animation stall. `updatePaintNode()` must also clear its cached
+  `QImage` with the surface format and row stride honoured, and recreates the
+  scene-graph texture on frame updates. The original buffer is unmapped by
+  spice-gtk when the guest changes resolution (notably while Windows boots);
+  keeping a texture from that pointer crashed `QSGBatchRenderer::prepareRenderPass`.
+  The full-frame copy/upload path is intentional: partial damage uploads through
+  one persistent texture produced stale and tearing surfaces on some guests
+  (Astra, GL scanout). `updatePaintNode()` must clear its cached
   `m_displayNode`/`m_cursorNode` pointers when Qt passes a null root after
   deleting the scene graph. Renderers return `nullptr` instead of deleting a
   node that is already attached; `DomainViewer` detaches the old display node
@@ -773,9 +753,8 @@ list in the root `CMakeLists.txt`, otherwise it will not be bundled.
   viewer without starting it and shows only a large clickable start triangle;
   it is started only when the user asks. When a running VM stops, the viewer
   closes automatically. Opening the menu releases the pointer grab first. There
-  is no explicit grab/release-pointer action: in server mouse mode clicking the
-  display grabs the pointer and Ctrl+Alt releases it (Esc is sent to the
-  guest); client mode uses the normal host pointer without a grab. A double-click
+  is no explicit grab/release-pointer action: clicking the display grabs the
+  pointer and Ctrl+Alt releases it (Esc is sent to the guest). A double-click
   on a VM list row opens that VM's
   viewer, whether it is running or stopped. UI icons use the monochrome
   `*-symbolic` variants. PCI and Storage have no separate menu actions; they are

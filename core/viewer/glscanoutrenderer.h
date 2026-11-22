@@ -11,7 +11,6 @@
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 
-#include <QElapsedTimer>
 #include <QMutex>
 
 class QOpenGLContext;
@@ -47,14 +46,8 @@ private:
         bool y0top = true;
         quint64 modifier = 0;
         bool enabled = false;
-        // Device/inode of every dma-buf. Duplicated descriptors of the same
-        // buffer keep the same identity, so the renderer can tell a new frame
-        // in an already imported buffer from a different buffer.
-        quint64 dev[4] = {};
-        quint64 inode[4] = {};
 
         void closeFds();
-        [[nodiscard]] bool sameBuffer(const Scanout &other) const;
     };
 
     static void gl_draw_callback(SpiceDisplayChannel *channel, guint x, guint y, guint width, guint height, gpointer user_data);
@@ -68,7 +61,6 @@ private:
     void clearEGLImage();
     void deleteTexture();
     void resetContextState();
-    void logScanoutStats();
     QSGTexture *createQSGTexture(QQuickWindow *window);
 
     SpiceDisplayChannel *m_channel = nullptr;
@@ -93,9 +85,6 @@ private:
     GLuint m_texId = 0;
     int m_textureWidth = 0;
     int m_textureHeight = 0;
-    quint64 m_frames = 0;
-    quint64 m_imports = 0;
-    QElapsedTimer m_statsElapsed;
 
     PFNEGLDESTROYIMAGEKHRPROC m_eglDestroyImageKHR = nullptr;
     PFNGLEGLIMAGETARGETTEXTURE2DOESPROC m_glEGLImageTargetTexture2DOES = nullptr;

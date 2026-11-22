@@ -121,16 +121,17 @@ Full layout rules and page inventory:
   while a VM may hold the image.
 - The viewer owns exactly one SPICE connection per VM: the hidden preview window
   is promoted to a real viewer, never duplicated or destroyed at runtime.
-- The primary renderer keeps one persistent RHI texture, uploads only damaged
-  rectangles, and never calls `createTextureFromImage()` per frame.
+- `PrimarySurfaceRenderer` keeps the stable full-frame copy/upload path. Do not
+  reintroduce partial damage uploads or one persistent texture without testing
+  Astra and GL scanout: that optimization caused stale/tearing surfaces.
 - SPICE cursor: client mode installs the guest shape as the host cursor and
   keeps the floating toolbar usable. Side/extra buttons are sent natively; on
   Windows they reach the guest as XBUTTON1/2 only when the SPICE vdagent
   supports SBUTTON/EBUTTON (v0.11+). The guest tools script installs the
-  maintained agent. Do not switch Windows domains to server mouse mode
-  (relative cursor, broken toolbar) or synthesize keyboard shortcuts. External
-  server-mode domains use the overlay fallback, but Karton never generates it.
-  Input is sent only when the inputs channel is ready.
+  maintained agent. Do not switch domains to server mouse mode (relative
+  cursor, hidden host pointer, broken fullscreen toolbar) or synthesize
+  keyboard shortcuts. Karton generates client mode only. Input is sent only
+  when the inputs channel is ready.
 - Request the full viewer area from the guest agent, not the aspect-fitted item
   size; fixed per-VM resolutions are windowed-only. Console streams use
   `VIR_STREAM_NONBLOCK` and deferred teardown.
