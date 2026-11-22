@@ -90,7 +90,7 @@ Kirigami.ApplicationWindow {
     // position, so the window does not flash at the fullscreen origin.
     property bool pendingWindowedLimits: false
     property int consoleFontSize: Karton.consoleFontSize(domain)
-    property string consoleFontFamily: Karton.consoleFontFamily()
+    property string consoleFontFamily: Karton.consoleFontFamily
     readonly property var consoleColorScheme: {
         const themes = Karton.consoleThemes();
         for (let i = 0; i < themes.length; ++i) {
@@ -111,7 +111,7 @@ Kirigami.ApplicationWindow {
 
     onDomainChanged: {
         consoleFontSize = Karton.consoleFontSize(domain);
-        consoleFontFamily = Karton.consoleFontFamily();
+        consoleFontFamily = Karton.consoleFontFamily;
         guestAgentSeen = domain ? Karton.guestAgentSeen(domain) : false;
         guestAgentWarningSuppressed = domain ? Karton.guestAgentWarningShown(domain) : false;
     }
@@ -1062,7 +1062,7 @@ Kirigami.ApplicationWindow {
             viewerWindow.consoleFontSize = Karton.consoleFontSize(viewerWindow.domain);
         }
         function onConsoleFontFamilyChanged() {
-            viewerWindow.consoleFontFamily = Karton.consoleFontFamily();
+            viewerWindow.consoleFontFamily = Karton.consoleFontFamily;
         }
         function onConsoleCursorShapeChanged() {
             serialTerminal.cursorShape = Karton.consoleCursorShape();
