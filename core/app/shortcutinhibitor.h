@@ -9,6 +9,13 @@
 
 class QWindow;
 
+namespace KartonShortcuts
+{
+// Clears the KDE-wide global shortcut block set through kglobalaccel. Returns
+// false when D-Bus is unavailable or the call failed.
+bool unblockGlobalShortcuts(int timeoutMs = 300);
+} // namespace KartonShortcuts
+
 // Inhibits compositor/desktop keyboard shortcuts for one window. Uses the
 // Wayland keyboard-shortcuts-inhibit protocol when available and an X11
 // keyboard grab as the fallback. The caller is responsible for releasing it

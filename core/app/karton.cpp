@@ -164,18 +164,10 @@ void Karton::releaseGlobalShortcuts()
     m_shortcutBlockedViewers.clear();
     m_kglobalShortcutsBlocked = false;
 
-    if (!QDBusConnection::sessionBus().isConnected()) {
-        return;
-    }
     // main.cpp exits with std::_Exit(0), so this must be synchronous: there is
     // no event loop left to deliver an async reply. Leaving kglobalaccel in the
     // blocked state would break every KDE global shortcut for the session.
-    QDBusMessage message = QDBusMessage::createMethodCall(QStringLiteral("org.kde.kglobalaccel"),
-                                                          QStringLiteral("/kglobalaccel"),
-                                                          QStringLiteral("org.kde.KGlobalAccel"),
-                                                          QStringLiteral("blockGlobalShortcuts"));
-    message << false;
-    QDBusConnection::sessionBus().call(message, QDBus::Block, 300);
+    KartonShortcuts::unblockGlobalShortcuts(300);
 }
 
 Karton::~Karton()

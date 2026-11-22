@@ -28,16 +28,77 @@
 #include <QTranslator>
 #include <QWindow>
 #include <QtQml>
+#include <cerrno>
+#include <chrono>
+#include <csignal>
 #include <cstdlib>
 #include <memory>
+#include <sys/socket.h>
+#include <thread>
+#include <unistd.h>
 
 #include "app/karton.h"
 #include "app/karton_private.h"
+#include "app/shortcutinhibitor.h"
 #include "karton_debug.h"
 #include "karton_version.h"
 
 static bool qmlCheckFailed = false;
 static bool verboseLogging = false;
+
+namespace
+{
+int unixSignalFds[2] = {-1, -1};
+
+// write() is async-signal-safe, so the handler only wakes the shutdown thread
+// through a socket pair.
+void unixSignalHandler(int)
+{
+    const char byte = 1;
+    [[maybe_unused]] const ssize_t written = ::write(unixSignalFds[1], &byte, 1);
+}
+
+// A SIGTERM used to kill the process without running aboutToQuit, which left
+// KDE global shortcuts blocked for the whole session because a viewer had
+// called KGlobalAccel.blockGlobalShortcuts(true). Test runs and session
+// shutdown both deliver SIGTERM, so it must shut down gracefully. The cleanup
+// cannot rely on the GUI thread: a blocking libvirt console read keeps it from
+// ever reaching the event loop, so a separate thread performs the fallback.
+void installTerminationHandler(QCoreApplication *app)
+{
+    if (::socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, unixSignalFds) != 0) {
+        qCWarning(KARTON_DEBUG) << "Failed to create the termination signal socket pair:" << errno;
+        return;
+    }
+    std::thread([app]() {
+        char byte = 0;
+        while (::read(unixSignalFds[0], &byte, 1) < 0 && errno == EINTR) { }
+        qCInfo(KARTON_DEBUG) << "Termination signal received, shutting down";
+        // Let the event loop quit gracefully first: aboutToQuit releases the
+        // shortcut block, the keyboard grab and the instance lock.
+        QMetaObject::invokeMethod(
+            app,
+            []() {
+                QCoreApplication::quit();
+            },
+            Qt::QueuedConnection);
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+        // The GUI thread did not finish (blocked read or stuck teardown).
+        // Release the KDE-wide shortcut block from this thread and exit.
+        qCWarning(KARTON_DEBUG) << "Forcing shutdown after a termination signal";
+        KartonShortcuts::unblockGlobalShortcuts(500);
+        std::_Exit(0);
+    }).detach();
+
+    struct sigaction action = {};
+    action.sa_handler = unixSignalHandler;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = SA_RESTART;
+    for (const int signalNumber : {SIGTERM, SIGINT, SIGHUP}) {
+        sigaction(signalNumber, &action, nullptr);
+    }
+}
+} // namespace
 
 static void libvirtErrorHandler(void *, virErrorPtr error)
 {
@@ -219,9 +280,11 @@ int main(int argc, char *argv[])
     qCInfo(KARTON_DEBUG) << "Hello! Starting Karton...";
 
     QObject::connect(&app, &QCoreApplication::aboutToQuit, [&instanceLock]() {
+        qCInfo(KARTON_DEBUG) << "Shutting down: releasing the global shortcut block";
         if (auto *karton = Karton::self()) {
             karton->releaseGlobalShortcuts();
         }
+        qCInfo(KARTON_DEBUG) << "Shutting down: global shortcut block released";
         if (instanceLock) {
             instanceLock->unlock();
         }
@@ -279,5 +342,9 @@ int main(int argc, char *argv[])
         return app.exec();
     }
 
+    // Installed after all startup work so a signal that arrives before the
+    // event loop runs still takes the default action; by then no shortcut
+    // block can have been set yet.
+    installTerminationHandler(&app);
     return app.exec();
 }

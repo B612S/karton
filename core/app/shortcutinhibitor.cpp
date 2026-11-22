@@ -3,6 +3,8 @@
 
 #include "app/shortcutinhibitor.h"
 
+#include <QDBusConnection>
+#include <QDBusMessage>
 #include <QGuiApplication>
 #include <QWindow>
 
@@ -15,6 +17,8 @@
 
 #include <algorithm>
 #include <cstring>
+
+#include "karton_debug.h"
 
 class ShortcutInhibitor::Private
 {
@@ -165,3 +169,24 @@ void ShortcutInhibitor::release()
     d->releaseX11();
     d->inhibited = false;
 }
+
+namespace KartonShortcuts
+{
+bool unblockGlobalShortcuts(int timeoutMs)
+{
+    if (!QDBusConnection::sessionBus().isConnected()) {
+        return false;
+    }
+    QDBusMessage message = QDBusMessage::createMethodCall(QStringLiteral("org.kde.kglobalaccel"),
+                                                          QStringLiteral("/kglobalaccel"),
+                                                          QStringLiteral("org.kde.KGlobalAccel"),
+                                                          QStringLiteral("blockGlobalShortcuts"));
+    message << false;
+    const QDBusMessage reply = QDBusConnection::sessionBus().call(message, QDBus::Block, timeoutMs);
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        qCWarning(KARTON_DEBUG) << "Failed to release the global shortcut block:" << reply.errorMessage();
+        return false;
+    }
+    return true;
+}
+} // namespace KartonShortcuts

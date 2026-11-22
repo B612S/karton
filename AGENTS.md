@@ -819,6 +819,20 @@ Karton style; do not invent a separate layout for a new screen.
   the guest does not block again. Seats
   and compositor grabs that never reach the client (for example some
   Meta/Super combinations) still cannot be intercepted.
+- KWin still consumes some window shortcuts such as Alt+F4 even with the
+  inhibitor protocol, so `Karton::updateGlobalShortcutsBlock()` also calls
+  `org.kde.kglobalaccel` `blockGlobalShortcuts(true)` while a viewer has the
+  pointer over the guest. That is process-global KDE state: if Karton dies
+  without clearing it, every global shortcut in the session stops working.
+  `Karton::releaseGlobalShortcuts()` (called from `aboutToQuit`, the
+  `Karton` destructor and `main.cpp`) clears it through
+  `KartonShortcuts::unblockGlobalShortcuts()`, and `Karton::init()` clears a
+  stale block left by a crashed instance. Because a blocking libvirt read can
+  keep the GUI thread from ever reaching `aboutToQuit`, `main.cpp` installs a
+  termination handler: SIGTERM/SIGINT/SIGHUP wake a separate thread that asks
+  the event loop to quit, waits three seconds and then unblocks the shortcuts
+  and `_Exit(0)` itself. Never SIGKILL a Karton test instance while a viewer is
+  open (no cleanup can run); send SIGTERM and let the handler exit it.
 - `DomainViewer::updateDisplayResolution()` calls
   `spice_main_channel_update_display()` with the complete viewer area in
   device pixels on page resize and when the SPICE agent connects; it enables
