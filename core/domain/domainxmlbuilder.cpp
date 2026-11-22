@@ -211,11 +211,14 @@ QString DomainXmlBuilder::generateXML(const DomainConfig *config, bool remote)
 
     // devices->graphics element
     const bool enableAccel3d = config->enableAccel3d();
-    // The Windows SPICE agent ignores the side/extra mouse buttons. Let the
-    // server use the tablet for them instead, otherwise back/forward buttons
-    // never reach the guest.
-    const bool windowsGuest =
-        config->shortOsId().startsWith(QStringLiteral("win"), Qt::CaseInsensitive) || osId.contains(QStringLiteral("microsoft.com/win"), Qt::CaseInsensitive);
+    // Keep the SPICE client mouse mode (the default). Karton adds a USB
+    // tablet, so the guest receives absolute pointer positions and clicks
+    // land where the host pointer is. <mouse mode='server'/> switches SPICE
+    // to relative motion, where the guest tracks its own cursor separately
+    // from the host pointer; the viewer installs the guest cursor shape as
+    // the host cursor, so the visible and clicked positions then diverge.
+    // QEMU's usb-tablet advertises the side/extra buttons since QEMU 10, so
+    // back/forward keep working without the server-mode workaround.
     addGraphicsDevices(document,
                        devices,
                        {.type = QStringLiteral("spice"),
@@ -224,8 +227,7 @@ QString DomainXmlBuilder::generateXML(const DomainConfig *config, bool remote)
                         .address = remote ? QStringLiteral("0.0.0.0") : QString(),
                         .password = remote ? QUuid::createUuid().toString(QUuid::WithoutBraces) : QString(),
                         .glEnable = enableAccel3d,
-                        .uuid = uuidString,
-                        .mouseServerMode = windowsGuest});
+                        .uuid = uuidString});
 
     // devices->sound element
     addSoundDevices(document, devices, {.model = QStringLiteral("ich9"), .id = QStringLiteral("1")});
@@ -397,12 +399,6 @@ void DomainXmlBuilder::addGraphicsDevices(QDomDocument &document, QDomElement &p
     }
 
     addElementWithAttributes(document, graphics, QStringLiteral("listen"), QString(), listen);
-
-    if (config.mouseServerMode) {
-        QMap<QString, QString> mouse;
-        mouse[QStringLiteral("mode")] = QStringLiteral("server");
-        addElementWithAttributes(document, graphics, QStringLiteral("mouse"), QString(), mouse);
-    }
 
     if (config.glEnable) {
         QMap<QString, QString> gl;

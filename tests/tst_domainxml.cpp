@@ -25,7 +25,7 @@ private Q_SLOTS:
     void readerParsesSecureBoot();
     void readerDetectsGraphics();
     void builderGeneratesUefiRawDomain();
-    void builderUsesTabletMouseForWindows();
+    void builderKeepsClientMouseModeForWindows();
     void builderCanDisableNetwork();
     void builderUpdatesHardwareAndPreservesMetadata();
     void builderLeavesUnknownStorageUntouched();
@@ -298,7 +298,7 @@ void DomainXmlTest::builderGeneratesUefiRawDomain()
     QCOMPARE(secureOs.firstChildElement(QStringLiteral("loader")).attribute(QStringLiteral("secure")), QStringLiteral("yes"));
 }
 
-void DomainXmlTest::builderUsesTabletMouseForWindows()
+void DomainXmlTest::builderKeepsClientMouseModeForWindows()
 {
     OsinfoConfig osinfo;
     const QStringList oses = osinfo.osList();
@@ -333,9 +333,23 @@ void DomainXmlTest::builderUsesTabletMouseForWindows()
 
     QDomDocument document;
     QVERIFY2(document.setContent(xml), qPrintable(xml));
-    const QDomElement graphics = document.documentElement().firstChildElement(QStringLiteral("devices")).firstChildElement(QStringLiteral("graphics"));
+    const QDomElement devices = document.documentElement().firstChildElement(QStringLiteral("devices"));
+    const QDomElement graphics = devices.firstChildElement(QStringLiteral("graphics"));
     QVERIFY(!graphics.isNull());
-    QCOMPARE(graphics.firstChildElement(QStringLiteral("mouse")).attribute(QStringLiteral("mode")), QStringLiteral("server"));
+    QCOMPARE(graphics.attribute(QStringLiteral("type")), QStringLiteral("spice"));
+    // Server mouse mode makes the guest track the pointer relatively, so the
+    // host cursor and the clicked guest position diverge. Karton's viewer
+    // relies on the tablet's absolute positions (client mode).
+    QVERIFY(graphics.firstChildElement(QStringLiteral("mouse")).isNull());
+
+    QDomElement tablet;
+    for (QDomElement input = devices.firstChildElement(QStringLiteral("input")); !input.isNull(); input = input.nextSiblingElement(QStringLiteral("input"))) {
+        if (input.attribute(QStringLiteral("type")) == QStringLiteral("tablet")) {
+            tablet = input;
+            break;
+        }
+    }
+    QVERIFY(!tablet.isNull());
 }
 
 void DomainXmlTest::builderCanDisableNetwork()

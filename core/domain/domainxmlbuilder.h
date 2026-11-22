@@ -59,10 +59,6 @@ private:
         QString password;
         bool glEnable = false;
         QString uuid;
-        // Windows guests get <mouse mode='server'/>: their SPICE agent does
-        // not forward the side/extra mouse buttons, so the tablet device is
-        // used instead and the guest sees a five-button mouse.
-        bool mouseServerMode = false;
     };
 
     struct SoundConfig {
