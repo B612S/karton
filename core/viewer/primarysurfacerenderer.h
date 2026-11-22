@@ -8,6 +8,10 @@
 
 #include <QImage>
 #include <QMutex>
+#include <QRect>
+#include <QVector>
+
+class SpiceFrameTexture;
 
 // CPU-based VM display renderer
 class PrimarySurfaceRenderer : public SpiceDisplayRenderer
@@ -19,6 +23,7 @@ public:
 
     void attach(SpiceDisplayChannel *channel) override;
     void detach() override;
+    void releaseResources() override;
 
     QSGNode *updatePaintNode(QQuickWindow *window, QSGNode *oldNode, const QRectF &bounds) override;
 
@@ -45,4 +50,9 @@ private:
     QImage m_frame;
     mutable QMutex m_frameLock;
     bool m_frameUpdated = false;
+    // Damage copied into m_frame but not yet uploaded. The texture is owned by
+    // the scene-graph node; this pointer only tracks it.
+    QVector<QRect> m_dirtyRects;
+    bool m_fullFrameDirty = true;
+    SpiceFrameTexture *m_frameTexture = nullptr;
 };

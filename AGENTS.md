@@ -121,9 +121,12 @@ Full layout rules and page inventory:
   while a VM may hold the image.
 - The viewer owns exactly one SPICE connection per VM: the hidden preview window
   is promoted to a real viewer, never duplicated or destroyed at runtime.
-- `PrimarySurfaceRenderer` keeps the stable full-frame copy/upload path. Do not
-  reintroduce partial damage uploads or one persistent texture without testing
-  Astra and GL scanout: that optimization caused stale/tearing surfaces.
+- `PrimarySurfaceRenderer` keeps its CPU frame in `RGB32`/`RGB16` and may use
+  one persistent `RGBA8` texture with damage-rectangle uploads; convert to
+  `RGBA8888` only for the texture. Do not switch to `ARGB32`/`BGRA8`, defer
+  conversion, or reuse GL scanout images: those paths caused wrong colours and
+  stale/tearing surfaces. Upload the full frame on surface/size changes and
+  when damage covers half the surface.
 - SPICE cursor: client mode installs the guest shape as the host cursor and
   keeps the floating toolbar usable. Side/extra buttons are sent natively; on
   Windows they reach the guest as XBUTTON1/2 only when the SPICE vdagent
