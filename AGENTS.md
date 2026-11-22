@@ -795,13 +795,12 @@ Karton style; do not invent a separate layout for a new screen.
   `DomainViewer::applyGuestCursor()`; no scene-graph cursor overlay is painted.
   There is one display node per renderer and one root node that owns it. Client
   mouse mode sends no SPICE `cursor-move` events, so the host cursor follows the
-  local pointer instead of the initial `(0, 0)` cursor position. New domains
-  must therefore keep the default client mouse mode and the USB tablet; never
-  emit `<mouse mode='server'/>`. Server mode makes the guest track a separate
-  relative cursor while the viewer shows the guest cursor shape at the host
-  pointer, so clicks land at a different place than the visible pointer. The
-  tablet already advertises the side/extra buttons, so back/forward do not need
-  server mode.
+  local pointer instead of the initial `(0, 0)` cursor position. Windows
+  guests use server mouse mode because their QXL/agent stack does not deliver
+  the side/extra buttons from the absolute tablet; a relative mouse device must
+  be present too. In server mode the viewer paints the guest cursor at the
+  reported `cursor-move` position and hides the host pointer, so clicks land
+  where the overlay is. Never use server mode without that overlay.
 - The viewer's `DomainViewer` must receive keyboard focus after the window
   opens (`forceActiveFocus` in `VMViewerWindow.qml` and on click), and after
   toolbar/menu/dialog interaction. Scancodes are normalized to evdev by

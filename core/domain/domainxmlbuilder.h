@@ -59,6 +59,10 @@ private:
         QString password;
         bool glEnable = false;
         QString uuid;
+        // Windows guests use SPICE server mouse mode so the relative mouse
+        // exposes the side/extra buttons as XBUTTON1/XBUTTON2. DomainViewer
+        // paints the guest cursor at its reported position in this mode.
+        bool mouseServerMode = false;
     };
 
     struct SoundConfig {
