@@ -49,6 +49,9 @@ void ClipboardManager::attach(SpiceSession *session, SpiceMainChannel *channel)
     m_clipboardConnection = QObject::connect(QGuiApplication::clipboard(), &QClipboard::dataChanged, this, [this]() {
         hostClipboardChanged();
     });
+    // The viewer may already be focused when the main channel connects (the
+    // focus event can arrive before the channel is ready).
+    scheduleHostClipboardResync();
 }
 
 void ClipboardManager::detach()
@@ -226,7 +229,27 @@ void ClipboardManager::clipboardSelectionCallback(SpiceMainChannel *channel, gui
 
 void ClipboardManager::setActive(bool active)
 {
+    if (m_active == active) {
+        return;
+    }
     m_active = active;
+    if (m_active) {
+        scheduleHostClipboardResync();
+    }
+}
+
+void ClipboardManager::scheduleHostClipboardResync()
+{
+    // Coming back from another window: the host clipboard may have changed
+    // while the viewer was inactive, so dataChanged never reached us. Give
+    // the focus transition a moment to settle (Wayland clipboard ownership is
+    // asynchronous), then publish the current host clipboard to the guest.
+    QTimer::singleShot(100, this, [this]() {
+        if (m_active && m_channel) {
+            qCInfo(KARTON_DEBUG) << "clipboard: resync host clipboard after activation";
+            hostClipboardChanged();
+        }
+    });
 }
 
 void ClipboardManager::hostClipboardChanged()

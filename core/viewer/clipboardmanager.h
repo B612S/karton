@@ -44,6 +44,7 @@ private:
     static void clipboardSelectionCallback(SpiceMainChannel *channel, guint selection, guint32 type, gconstpointer data, guint size, gpointer userData);
 
     void hostClipboardChanged();
+    void scheduleHostClipboardResync();
     QByteArray buildFileList(const QList<QUrl> &urls);
 
     SpiceSession *m_session = nullptr;

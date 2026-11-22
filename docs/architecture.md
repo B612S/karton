@@ -497,7 +497,10 @@ list in the root `CMakeLists.txt`, otherwise it will not be bundled.
 - Clipboard synchronization uses the SPICE main channel and the guest agent.
   Host clipboard reads are skipped unless the viewer item has focus
   (`ClipboardManager::setActive()`), because a Wayland clipboard read can block
-  while another client owns the selection.
+  while another client owns the selection. On activation the manager schedules
+  a short (100 ms) resync: a copy made in another window while the viewer was
+  unfocused does not emit `dataChanged` for Karton, so without this the guest
+  would keep the previous clipboard.
   Application Settings has separate text/file modes: 0 disabled, 1 host to
   guest, 2 guest to host, 3 bidirectional (`clipboard/textMode` and
   `clipboard/filesMode`). Text uses `main-clipboard-selection-*` and is
