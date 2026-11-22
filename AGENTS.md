@@ -869,11 +869,18 @@ Karton style; do not invent a separate layout for a new screen.
   `QImage`. The original buffer is unmapped by spice-gtk when the guest changes
   resolution (notably while Windows boots); creating/using a texture from that
   pointer on the render thread used to crash `QSGBatchRenderer::prepareRenderPass`.
-  It converts 32-bit xRGB/ARGB and 16-bit 555/565 surfaces into RGBA8888 images
-  and honours the row stride for damage copies. The renderer keeps one
+  It copies 32-bit xRGB/ARGB surfaces as BGRA rows into an `ARGB32` frame (the
+  RHI texture is `BGRA8`, so the GPU does the byte order conversion while
+  sampling) and expands 16-bit 555/565 surfaces through a 64K lookup table
+  instead of per-pixel arithmetic. Backends that cannot sample `BGRA8` get an
+  explicit `RGBA8888` conversion at upload time. The row stride is honoured for
+  damage copies. The renderer keeps one
   persistent RHI texture (`SpiceFrameTexture`, owned by the scene-graph node)
   and uploads only the damaged rectangles recorded by the display-invalidate
-  handler; the texture receives snapshots of those rectangles only, so an
+  handler; overlapping rectangles are merged, and above three rectangles their
+  bounding rectangle is uploaded so one frame does not issue a dozen
+  `glTexSubImage2D` calls. The texture receives snapshots of those rectangles
+  only, so an
   ordinary frame never copies the whole surface. The whole surface is uploaded
   only on surface creation/resolution changes, when a full frame is flagged,
   when damage tracking overflows 16 rectangles, or when the damaged area is at
