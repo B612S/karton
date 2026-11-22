@@ -211,15 +211,10 @@ QString DomainXmlBuilder::generateXML(const DomainConfig *config, bool remote)
 
     // devices->graphics element
     const bool enableAccel3d = config->enableAccel3d();
-    // Windows guests get a server-mode SPICE mouse. The Windows QXL/agent
-    // stack does not deliver the side/extra buttons from the absolute tablet,
-    // but the emulated relative mouse exposes them as XBUTTON1/XBUTTON2.
-    // Server mode moves the guest cursor relatively, so DomainViewer draws the
-    // SPICE cursor at its reported position instead of installing its shape
-    // under the host pointer; otherwise clicks would land away from the
-    // visible cursor. A relative mouse device is required and is added below.
-    const bool windowsGuest =
-        config->shortOsId().startsWith(QStringLiteral("win"), Qt::CaseInsensitive) || osId.contains(QStringLiteral("microsoft.com/win"), Qt::CaseInsensitive);
+    // Keep the default client mouse mode. The absolute tablet gives smooth
+    // pointer movement and works with the floating toolbar; Windows side
+    // buttons are translated to Alt+Left/Alt+Right by DomainViewer because the
+    // guest agent path used in client mode may not forward XBUTTON1/XBUTTON2.
     addGraphicsDevices(document,
                        devices,
                        {.type = QStringLiteral("spice"),
@@ -228,8 +223,7 @@ QString DomainXmlBuilder::generateXML(const DomainConfig *config, bool remote)
                         .address = remote ? QStringLiteral("0.0.0.0") : QString(),
                         .password = remote ? QUuid::createUuid().toString(QUuid::WithoutBraces) : QString(),
                         .glEnable = enableAccel3d,
-                        .uuid = uuidString,
-                        .mouseServerMode = windowsGuest});
+                        .uuid = uuidString});
 
     // devices->sound element
     addSoundDevices(document, devices, {.model = QStringLiteral("ich9"), .id = QStringLiteral("1")});
@@ -250,12 +244,6 @@ QString DomainXmlBuilder::generateXML(const DomainConfig *config, bool remote)
                      .enableAccel3d = enableAccel3d});
 
     addInputDevices(document, devices, {.type = QStringLiteral("tablet"), .bus = QStringLiteral("usb")});
-
-    // Server mouse mode sends relative motion; without a relative pointing
-    // device QEMU drops it. The tablet alone only accepts absolute events.
-    if (windowsGuest) {
-        addInputDevices(document, devices, {.type = QStringLiteral("mouse"), .bus = QStringLiteral("usb")});
-    }
 
     addInputDevices(document, devices, {.type = QStringLiteral("keyboard"), .bus = QStringLiteral("usb")});
 
@@ -407,12 +395,6 @@ void DomainXmlBuilder::addGraphicsDevices(QDomDocument &document, QDomElement &p
     }
 
     addElementWithAttributes(document, graphics, QStringLiteral("listen"), QString(), listen);
-
-    if (config.mouseServerMode) {
-        QMap<QString, QString> mouse;
-        mouse[QStringLiteral("mode")] = QStringLiteral("server");
-        addElementWithAttributes(document, graphics, QStringLiteral("mouse"), QString(), mouse);
-    }
 
     if (config.glEnable) {
         QMap<QString, QString> gl;

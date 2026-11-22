@@ -242,6 +242,10 @@ private:
 
     void updatePointer(const QPointF &position, int buttonMask);
     void updateCursorPaintPosition();
+    // Windows guest agents in client mouse mode may drop the side/extra
+    // buttons. Translate them to the standard Alt+Left/Alt+Right shortcuts.
+    bool useKeyboardBackForward() const;
+    void sendBackForwardShortcut(bool forward);
     QPointF guestPositionForLocal(const QPointF &position) const;
     int mouseMode() const;
 
@@ -294,6 +298,9 @@ private:
     bool m_hasLocalPointerPosition = false;
     QPointF m_virtualPointerPosition;
     bool m_hasVirtualPointerPosition = false;
+    // Set while a back/forward press was translated to a keyboard shortcut, so
+    // the matching release does not send a SPICE mouse release.
+    bool m_backForwardKeyboardMode = false;
 
     PipeWireAudioSink *m_audioPipeWire = nullptr;
     // Guest mixer state from SPICE_PLAYBACK_CAP_VOLUME messages, in the

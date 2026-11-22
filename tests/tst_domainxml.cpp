@@ -25,7 +25,7 @@ private Q_SLOTS:
     void readerParsesSecureBoot();
     void readerDetectsGraphics();
     void builderGeneratesUefiRawDomain();
-    void builderUsesServerMouseModeForWindows();
+    void builderKeepsClientMouseModeForWindows();
     void builderCanDisableNetwork();
     void builderUpdatesHardwareAndPreservesMetadata();
     void builderLeavesUnknownStorageUntouched();
@@ -298,7 +298,7 @@ void DomainXmlTest::builderGeneratesUefiRawDomain()
     QCOMPARE(secureOs.firstChildElement(QStringLiteral("loader")).attribute(QStringLiteral("secure")), QStringLiteral("yes"));
 }
 
-void DomainXmlTest::builderUsesServerMouseModeForWindows()
+void DomainXmlTest::builderKeepsClientMouseModeForWindows()
 {
     OsinfoConfig osinfo;
     const QStringList oses = osinfo.osList();
@@ -337,23 +337,18 @@ void DomainXmlTest::builderUsesServerMouseModeForWindows()
     const QDomElement graphics = devices.firstChildElement(QStringLiteral("graphics"));
     QVERIFY(!graphics.isNull());
     QCOMPARE(graphics.attribute(QStringLiteral("type")), QStringLiteral("spice"));
-    // Windows needs server mouse mode for the side/extra buttons; the viewer
-    // draws the guest cursor at the SPICE cursor position in that mode.
-    QCOMPARE(graphics.firstChildElement(QStringLiteral("mouse")).attribute(QStringLiteral("mode")), QStringLiteral("server"));
+    // Client mouse mode keeps absolute positioning and the floating toolbar
+    // usable. Windows side buttons are handled in the viewer instead.
+    QVERIFY(graphics.firstChildElement(QStringLiteral("mouse")).isNull());
 
     bool haveTablet = false;
-    bool haveMouse = false;
     for (QDomElement input = devices.firstChildElement(QStringLiteral("input")); !input.isNull(); input = input.nextSiblingElement(QStringLiteral("input"))) {
-        const QString type = input.attribute(QStringLiteral("type"));
-        if (type == QStringLiteral("tablet")) {
+        if (input.attribute(QStringLiteral("type")) == QStringLiteral("tablet")) {
             haveTablet = true;
-        } else if (type == QStringLiteral("mouse")) {
-            haveMouse = true;
+            break;
         }
     }
     QVERIFY(haveTablet);
-    // Server mode sends relative motion, which needs a relative pointer.
-    QVERIFY(haveMouse);
 }
 
 void DomainXmlTest::builderCanDisableNetwork()

@@ -610,11 +610,14 @@ list in the root `CMakeLists.txt`, otherwise it will not be bundled.
   painted. There is one display node per renderer and one root node that owns
   it. Client mouse mode sends no SPICE `cursor-move` events, so the host cursor
   follows the local pointer instead of the initial `(0, 0)` cursor position.
-  Windows guests use server mouse mode because their QXL/agent stack does not
-  deliver the side/extra buttons from the absolute tablet; a relative mouse
-  device must be present too. In server mode the viewer paints the guest cursor
-  overlay at the reported `cursor-move` position and hides the host pointer, so
-  clicks land where the overlay is. Never use server mode without that overlay.
+  Karton keeps generation in client mode: Windows back/forward buttons are
+  translated by `DomainViewer` to Alt+Left/Alt+Right because the Windows
+  vdagent used by the client mouse path may drop XBUTTON1/XBUTTON2. Do not
+  switch Windows domains to server mouse mode: it makes the guest cursor move
+  relatively, the viewer has to hide the host pointer, and the fullscreen
+  toolbar becomes hard to use. Domains with an explicit server-mode `<mouse>`
+  in their XML still get the overlay fallback: the viewer paints the guest
+  cursor at the reported `cursor-move` position and hides the host pointer.
 - The viewer's `DomainViewer` must receive keyboard focus after the window
   opens (`forceActiveFocus` in `VMViewerWindow.qml` and on click), and after
   toolbar/menu/dialog interaction. Scancodes are normalized to evdev by
@@ -688,9 +691,9 @@ list in the root `CMakeLists.txt`, otherwise it will not be bundled.
 - In client mouse mode the guest cursor is installed as the actual host cursor
   and no scene-graph overlay is painted, so pointer motion must not call
   `QQuickItem::update()`; doing so repainted the whole viewer at pointer rate.
-  In server mouse mode (Windows side/extra buttons) the viewer paints the
-  guest cursor overlay at the `cursor-move` position and repaints on cursor
-  events, not on host pointer motion. A guest `cursor-hide` blanks the host
+  In server mouse mode (external domains with an explicit `<mouse>` element)
+  the viewer paints the guest cursor overlay at the `cursor-move` position and
+  repaints on cursor events, not on host pointer motion. A guest `cursor-hide` blanks the host
   cursor while the pointer is over the display instead of re-installing the
   last shape: the guest draws its own cursor into the framebuffer in that case
   (window dragging, full-screen video, xrdp/mstsc), and showing the stale host
@@ -768,8 +771,9 @@ list in the root `CMakeLists.txt`, otherwise it will not be bundled.
   viewer without starting it and shows only a large clickable start triangle;
   it is started only when the user asks. When a running VM stops, the viewer
   closes automatically. Opening the menu releases the pointer grab first. There
-  is no explicit grab/release-pointer action: clicking the display grabs the
-  pointer and Ctrl+Alt releases it (Esc is sent to the guest). A double-click
+  is no explicit grab/release-pointer action: in server mouse mode clicking the
+  display grabs the pointer and Ctrl+Alt releases it (Esc is sent to the
+  guest); client mode uses the normal host pointer without a grab. A double-click
   on a VM list row opens that VM's
   viewer, whether it is running or stopped. UI icons use the monochrome
   `*-symbolic` variants. PCI and Storage have no separate menu actions; they are

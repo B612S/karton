@@ -447,6 +447,7 @@ void DomainViewer::disconnectFromSpice()
     }
 
     m_serverMouseMode.store(false, std::memory_order_relaxed);
+    m_backForwardKeyboardMode = false;
     clearCursor();
     update();
 
@@ -983,6 +984,7 @@ void DomainViewer::sessionDisconnectedCallback(SpiceSession *session, gpointer u
     item->m_inputs_channel = nullptr;
     item->m_recordChannel = nullptr;
     item->m_current_button_mask = 0;
+    item->m_backForwardKeyboardMode = false;
     item->m_serverMouseMode.store(false, std::memory_order_relaxed);
     item->releasePointerGrab();
     item->clearCursor();
@@ -1735,6 +1737,9 @@ void DomainViewer::updateMouseMode()
         return;
     }
     qCInfo(KARTON_DEBUG) << "SPICE mouse mode:" << (server ? "server" : "client");
+    if (!server && m_pointerGrabbed) {
+        releasePointerGrab();
+    }
     // The two modes report the cursor differently: client mode follows the
     // host pointer, server mode follows the cursor channel. Do not carry an
     // accumulated position across the switch.
@@ -1752,6 +1757,45 @@ void DomainViewer::mouseModeUpdatedCallback(SpiceMainChannel *channel, GParamSpe
     Q_UNUSED(channel);
     Q_UNUSED(pspec);
     static_cast<DomainViewer *>(userData)->updateMouseMode();
+}
+
+bool DomainViewer::useKeyboardBackForward() const
+{
+    if (!m_domain || !m_main_channel || !m_connected || !m_inputs_channel) {
+        return false;
+    }
+    // In server mouse mode the relative mouse already delivers side/extra.
+    if (m_serverMouseMode.load(std::memory_order_relaxed)) {
+        return false;
+    }
+    // Without the guest agent, client mode uses the tablet, which exposes the
+    // buttons natively. The Windows agent path is the one that drops them.
+    gboolean agentConnected = FALSE;
+    g_object_get(m_main_channel, "agent-connected", &agentConnected, nullptr);
+    if (!agentConnected) {
+        return false;
+    }
+    const DomainConfig *config = m_domain->config();
+    if (!config) {
+        return false;
+    }
+    return config->shortOsId().startsWith(QStringLiteral("win"), Qt::CaseInsensitive)
+        || config->osId().contains(QStringLiteral("microsoft.com/win"), Qt::CaseInsensitive);
+}
+
+void DomainViewer::sendBackForwardShortcut(bool forward)
+{
+    if (!m_inputs_channel) {
+        return;
+    }
+    // Windows uses Alt+Left/Alt+Right for back/forward. PC XT scancodes:
+    // Alt=0x38, Left=0x14b, Right=0x14d (extended keys keep the 0x100 flag).
+    const quint32 alt = 0x38;
+    const quint32 arrow = forward ? 0x14d : 0x14b;
+    spice_inputs_channel_key_press(m_inputs_channel, alt);
+    spice_inputs_channel_key_press(m_inputs_channel, arrow);
+    spice_inputs_channel_key_release(m_inputs_channel, arrow);
+    spice_inputs_channel_key_release(m_inputs_channel, alt);
 }
 
 QPointF DomainViewer::guestPositionForLocal(const QPointF &position) const
@@ -1829,8 +1873,9 @@ void DomainViewer::updatePointer(const QPointF &position, int buttonMask)
         return;
     }
 
-    const QPointF absolute = m_pointerGrabbed ? m_virtualPointerPosition : guestPosition;
-    spice_inputs_channel_position(m_inputs_channel, qRound(absolute.x()), qRound(absolute.y()), 0, buttonMask);
+    // Client mode is absolute by definition, even if a stale grab is still
+    // active from a mode switch or a previous server-mode session.
+    spice_inputs_channel_position(m_inputs_channel, qRound(guestPosition.x()), qRound(guestPosition.y()), 0, buttonMask);
     // Do not repaint the scene graph here: the guest cursor is installed as
     // the host cursor, and repainting on every motion event at pointer rate
     // wasted GPU/CPU time (and caused needless present churn).
@@ -1941,11 +1986,13 @@ void DomainViewer::mouseMoveEvent(QMouseEvent *event)
     // Keep the side/extra bits while the pointer moves with those buttons
     // held; otherwise the next motion clears them and a drag with the
     // back/forward button looks like a release.
-    if (event->buttons() & Qt::BackButton) {
-        buttonMask |= SPICE_MOUSE_BUTTON_MASK_SIDE;
-    }
-    if (event->buttons() & Qt::ForwardButton) {
-        buttonMask |= SPICE_MOUSE_BUTTON_MASK_EXTRA;
+    if (!m_backForwardKeyboardMode) {
+        if (event->buttons() & Qt::BackButton) {
+            buttonMask |= SPICE_MOUSE_BUTTON_MASK_SIDE;
+        }
+        if (event->buttons() & Qt::ForwardButton) {
+            buttonMask |= SPICE_MOUSE_BUTTON_MASK_EXTRA;
+        }
     }
 
     updatePointer(event->position(), buttonMask);
@@ -2031,7 +2078,12 @@ void DomainViewer::mousePressEvent(QMouseEvent *event)
         viewerWindow->raise();
         viewerWindow->requestActivate();
     }
-    grabPointer();
+    // A pointer grab is only needed for server mouse mode, where motion is
+    // relative. In client mode it would hide the host cursor and make the
+    // floating toolbar and absolute pointer feel wrong.
+    if (m_serverMouseMode.load(std::memory_order_relaxed)) {
+        grabPointer();
+    }
     forceActiveFocus();
 
     if (!inputsReady()) {
@@ -2055,12 +2107,22 @@ void DomainViewer::mousePressEvent(QMouseEvent *event)
     // mouse. SPICE calls them side and extra, and the guest sees them as X11
     // buttons 8 and 9 (XBUTTON1/XBUTTON2 on Windows).
     case Qt::BackButton:
-        m_current_button_mask |= SPICE_MOUSE_BUTTON_MASK_SIDE;
-        spice_inputs_channel_button_press(m_inputs_channel, SPICE_MOUSE_BUTTON_SIDE, m_current_button_mask);
+        m_backForwardKeyboardMode = useKeyboardBackForward();
+        if (m_backForwardKeyboardMode) {
+            sendBackForwardShortcut(false);
+        } else {
+            m_current_button_mask |= SPICE_MOUSE_BUTTON_MASK_SIDE;
+            spice_inputs_channel_button_press(m_inputs_channel, SPICE_MOUSE_BUTTON_SIDE, m_current_button_mask);
+        }
         break;
     case Qt::ForwardButton:
-        m_current_button_mask |= SPICE_MOUSE_BUTTON_MASK_EXTRA;
-        spice_inputs_channel_button_press(m_inputs_channel, SPICE_MOUSE_BUTTON_EXTRA, m_current_button_mask);
+        m_backForwardKeyboardMode = useKeyboardBackForward();
+        if (m_backForwardKeyboardMode) {
+            sendBackForwardShortcut(true);
+        } else {
+            m_current_button_mask |= SPICE_MOUSE_BUTTON_MASK_EXTRA;
+            spice_inputs_channel_button_press(m_inputs_channel, SPICE_MOUSE_BUTTON_EXTRA, m_current_button_mask);
+        }
         break;
     default:
         return;
@@ -2092,10 +2154,22 @@ void DomainViewer::mouseReleaseEvent(QMouseEvent *event)
         m_current_button_mask &= ~SPICE_MOUSE_BUTTON_MASK_RIGHT;
         break;
     case Qt::BackButton:
+        if (m_backForwardKeyboardMode) {
+            // The whole Alt+Left sequence was sent on press.
+            m_backForwardKeyboardMode = false;
+            event->accept();
+            return;
+        }
         button = SPICE_MOUSE_BUTTON_SIDE;
         m_current_button_mask &= ~SPICE_MOUSE_BUTTON_MASK_SIDE;
         break;
     case Qt::ForwardButton:
+        if (m_backForwardKeyboardMode) {
+            // The whole Alt+Right sequence was sent on press.
+            m_backForwardKeyboardMode = false;
+            event->accept();
+            return;
+        }
         button = SPICE_MOUSE_BUTTON_EXTRA;
         m_current_button_mask &= ~SPICE_MOUSE_BUTTON_MASK_EXTRA;
         break;
