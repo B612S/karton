@@ -62,6 +62,7 @@ find_package(Qt6 REQUIRED COMPONENTS
     Quick
     Gui
     GuiPrivate
+    QuickPrivate
     QuickControls2
     Widgets
     Xml
@@ -269,6 +270,7 @@ target_link_libraries(karton
     Qt6::Multimedia
     Qt6::Network
     Qt6::GuiPrivate
+    Qt6::QuickPrivate
     Qt6::DBus
     PkgConfig::WAYLAND_CLIENT
     KF6::CoreAddons

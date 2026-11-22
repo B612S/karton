@@ -869,14 +869,23 @@ Karton style; do not invent a separate layout for a new screen.
   `QImage`. The original buffer is unmapped by spice-gtk when the guest changes
   resolution (notably while Windows boots); creating/using a texture from that
   pointer on the render thread used to crash `QSGBatchRenderer::prepareRenderPass`.
-  It converts 32-bit xRGB/ARGB and 16-bit 555/565 surfaces into RGB32/RGB16
-  images and honours the row stride for damage copies. `updatePaintNode()` must
-  also clear its cached `m_displayNode`/`m_cursorNode` pointers when Qt passes a
-  null root after deleting the scene graph. Renderers return `nullptr` instead
-  of deleting a node that is already attached; `DomainViewer` detaches the old
-  display node from its root and deletes it. Display textures use
-  `QSGTexture::Linear` filtering so fonts stay readable when the guest
-  resolution does not exactly match the viewer size.
+  It converts 32-bit xRGB/ARGB and 16-bit 555/565 surfaces into RGBA8888 images
+  and honours the row stride for damage copies. The renderer keeps one
+  persistent RHI texture (`SpiceFrameTexture`, owned by the scene-graph node)
+  and uploads only the damaged rectangles recorded by the display-invalidate
+  handler; the texture receives snapshots of those rectangles only, so an
+  ordinary frame never copies the whole surface. The whole surface is uploaded
+  only on surface creation/resolution changes, when a full frame is flagged,
+  when damage tracking overflows 16 rectangles, or when the damaged area is at
+  least half of the surface. Do not go back to `createTextureFromImage()` per frame: it
+  allocates and uploads the complete 8–20 MiB surface on every guest frame and
+  was the boot-animation stall. `updatePaintNode()` must also clear its cached
+  `m_displayNode`/`m_cursorNode` pointers when Qt passes a null root after
+  deleting the scene graph. Renderers return `nullptr` instead of deleting a
+  node that is already attached; `DomainViewer` detaches the old display node
+  from its root and deletes it. Display textures use `QSGTexture::Linear`
+  filtering so fonts stay readable when the guest resolution does not exactly
+  match the viewer size.
 - If a domain has no usable SPICE display (for example a VM with
   `<graphics>` removed and `-display none`), `DomainViewer` falls back to the
   first libvirt console stream (`virDomainOpenConsole()` +
