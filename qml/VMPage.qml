@@ -37,6 +37,18 @@ Kirigami.Page {
     // Hidden viewer window that keeps the single SPICE connection alive for
     // the preview and is promoted to a real viewer when the user opens it.
     property var previewWindow: null
+    // The console preview is a thumbnail of the serial console, so it must use
+    // the same palette as the real console; otherwise a non-default console
+    // theme (for example a light one) would still show up dark in the VM page.
+    readonly property var consoleColorScheme: {
+        const themes = Karton.consoleThemes();
+        for (let i = 0; i < themes.length; ++i) {
+            if (themes[i].id === Karton.consoleTheme) {
+                return themes[i];
+            }
+        }
+        return themes.length > 0 ? themes[0] : ({});
+    }
 
     onDomainChanged: {
         stats = domain && domain.isActive && Karton.viewerCount === 0 ? Karton.domainStats(domain) : ({});
@@ -581,7 +593,11 @@ Kirigami.Page {
 
             Rectangle {
                 Layout.fillWidth: true
-                color: "black"
+                // The terminal paints its own background, but matching the
+                // backdrop avoids a black border around a themed console.
+                color: root.isRunning && domain && domain.consolePreviewActive
+                       ? (root.consoleColorScheme.background || "black")
+                       : "black"
                 Layout.preferredHeight: Kirigami.Units.gridUnit * 16
 
                 PreviewItem {
@@ -618,6 +634,8 @@ Kirigami.Page {
                     enabled: false
                     focus: false
                     fontSize: 9
+                    fontFamily: Karton.consoleFontFamily
+                    colorScheme: root.consoleColorScheme
                     cursorShape: Karton.consoleCursorShape()
                 }
 
