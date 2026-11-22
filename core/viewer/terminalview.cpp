@@ -259,7 +259,7 @@ void TerminalView::resizeGrid(int columns, int rows)
     const auto resizeCells = [&](QVector<Cell> &cells) {
         QVector<Cell> resized(columns * rows);
         for (Cell &cell : resized) {
-            cell = Cell();
+            cell = blankCell();
         }
         const int copyColumns = qMin(columns, oldColumns);
         const int copyRows = qMin(rows, oldRows);
@@ -278,7 +278,7 @@ void TerminalView::resizeGrid(int columns, int rows)
     for (QVector<Cell> &line : m_scrollback) {
         QVector<Cell> resized(columns);
         for (Cell &cell : resized) {
-            cell = Cell();
+            cell = blankCell();
         }
         const int copyColumns = qMin(columns, qMin(oldColumns, line.size()));
         for (int column = 0; column < copyColumns; ++column) {
