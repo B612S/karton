@@ -23,7 +23,6 @@
 #include <QPixmap>
 #include <QQuickItemGrabResult>
 #include <QQuickWindow>
-#include <QSGSimpleTextureNode>
 #include <QScreen>
 #include <QString>
 #include <QTimer>
@@ -35,6 +34,7 @@
 #include "viewer/glscanoutrenderer.h"
 #include "viewer/primarysurfacerenderer.h"
 
+#include "util/calltimer.h"
 #include "util/evdev_to_xtkbd_map.h"
 
 DomainViewer::DomainViewer(QQuickItem *parent)
@@ -170,6 +170,10 @@ void DomainViewer::componentComplete()
 
 bool DomainViewer::setupSpiceSession()
 {
+    // Runs on the GUI thread whenever a viewer/preview (re)connects. Reading
+    // the endpoint from libvirt can block while the domain is still starting,
+    // so log it when that freezes the window.
+    ScopedCallTimer timer("DomainViewer::setupSpiceSession");
     if (m_previewOnly && m_previewStopped) {
         return false;
     }
@@ -722,7 +726,6 @@ void DomainViewer::attachCursorChannel(SpiceChannel *channel)
 {
     spice_channel_connect(channel);
     g_signal_connect(channel, "cursor-set", G_CALLBACK(cursorSetCallback), this);
-    g_signal_connect(channel, "cursor-move", G_CALLBACK(cursorMoveCallback), this);
     g_signal_connect(channel, "cursor-hide", G_CALLBACK(cursorHideCallback), this);
     g_signal_connect(channel, "cursor-reset", G_CALLBACK(cursorResetCallback), this);
 }
@@ -744,22 +747,8 @@ void DomainViewer::cursorSetCallback(SpiceCursorChannel *channel, gint width, gi
         item->m_cursorImage = image.copy();
         item->m_cursorHotspot = QPoint(hotX, hotY);
         item->m_cursorVisible = true;
-        item->m_cursorTextureDirty = true;
     }
     item->applyGuestCursor();
-    item->update();
-}
-
-void DomainViewer::cursorMoveCallback(SpiceCursorChannel *channel, gint x, gint y, gpointer userData)
-{
-    Q_UNUSED(channel);
-
-    auto *item = static_cast<DomainViewer *>(userData);
-    qCDebug(KARTON_DEBUG) << "SPICE cursor-move:" << x << y;
-    {
-        QMutexLocker locker(&item->m_cursorMutex);
-        item->m_cursorPosition = QPoint(x, y);
-    }
     item->update();
 }
 
@@ -825,8 +814,6 @@ void DomainViewer::clearCursor()
         QMutexLocker locker(&m_cursorMutex);
         m_cursorImage = QImage();
         m_cursorVisible = false;
-        m_cursorTextureDirty = true;
-        m_hasCursorPaintPosition = false;
     }
     if (!m_pointerGrabbed) {
         unsetCursor();
@@ -1127,7 +1114,6 @@ QSGNode *DomainViewer::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         // member pointers must not be reused after that, otherwise the next
         // update appends a dangling node and crashes in QSGBatchRenderer.
         m_displayNode = nullptr;
-        m_cursorNode = nullptr;
         root = new QSGNode;
     }
 
@@ -1165,15 +1151,7 @@ QSGNode *DomainViewer::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
     }
 
     // The guest cursor is installed as the actual host cursor in
-    // applyGuestCursor(). Do not also paint a scene-graph cursor: in client
-    // mouse mode SPICE sends no cursor position, so the overlay would be
-    // stranded at a stale position while the host cursor follows the pointer.
-    if (m_cursorNode) {
-        root->removeChildNode(m_cursorNode);
-        delete m_cursorNode;
-        m_cursorNode = nullptr;
-    }
-
+    // applyGuestCursor(); no scene-graph cursor overlay is painted.
     return root;
 }
 
@@ -1189,7 +1167,6 @@ void DomainViewer::releaseResources()
         m_detachedRenderer->releaseResources();
     }
     m_displayNode = nullptr;
-    m_cursorNode = nullptr;
     QQuickItem::releaseResources();
 }
 
@@ -1557,17 +1534,6 @@ void DomainViewer::grabPointer()
     qCInfo(KARTON_DEBUG) << "Pointer grabbed; SPICE mouse mode:" << mouseMode();
     m_hasLastPointerPosition = false;
 
-    if (!m_hasVirtualPointerPosition) {
-        if (m_hasLocalPointerPosition) {
-            m_virtualPointerPosition = guestPositionForLocal(m_localPointerPosition);
-        } else if (m_renderer && m_renderer->frameSize().isValid()) {
-            const QSize frameSize = m_renderer->frameSize();
-            m_virtualPointerPosition = QPointF(frameSize.width() / 2.0, frameSize.height() / 2.0);
-        }
-        m_hasVirtualPointerPosition = true;
-    }
-    updateCursorPaintPosition();
-
     setCursor(Qt::BlankCursor);
     forceActiveFocus();
     Q_EMIT pointerGrabbedChanged();
@@ -1626,20 +1592,6 @@ QPointF DomainViewer::guestPositionForLocal(const QPointF &position) const
     return QPointF(position.x() * frameSize.width() / width(), position.y() * frameSize.height() / height());
 }
 
-void DomainViewer::updateCursorPaintPosition()
-{
-    QMutexLocker locker(&m_cursorMutex);
-    if (m_hasVirtualPointerPosition) {
-        m_cursorPaintPosition = m_virtualPointerPosition;
-        m_hasCursorPaintPosition = true;
-    } else if (m_hasLocalPointerPosition) {
-        m_cursorPaintPosition = guestPositionForLocal(m_localPointerPosition);
-        m_hasCursorPaintPosition = true;
-    } else {
-        m_hasCursorPaintPosition = false;
-    }
-}
-
 void DomainViewer::updatePointer(const QPointF &position, int buttonMask)
 {
     if (!inputsReady() || width() <= 0 || height() <= 0) {
@@ -1657,31 +1609,12 @@ void DomainViewer::updatePointer(const QPointF &position, int buttonMask)
 
     const QPointF delta = position - m_lastPointerPosition;
     m_lastPointerPosition = position;
-    m_localPointerPosition = position;
-    m_hasLocalPointerPosition = true;
 
     QPointF guestPosition = guestPositionForLocal(position);
     if (frameSize.isValid()) {
         guestPosition.setX(qBound<qreal>(0, guestPosition.x(), frameSize.width()));
         guestPosition.setY(qBound<qreal>(0, guestPosition.y(), frameSize.height()));
     }
-
-    if (m_pointerGrabbed) {
-        if (!m_hasVirtualPointerPosition) {
-            m_virtualPointerPosition = guestPosition;
-            m_hasVirtualPointerPosition = true;
-        } else {
-            m_virtualPointerPosition += QPointF(delta.x() * scaleX, delta.y() * scaleY);
-            if (frameSize.isValid()) {
-                m_virtualPointerPosition.setX(qBound<qreal>(0, m_virtualPointerPosition.x(), frameSize.width()));
-                m_virtualPointerPosition.setY(qBound<qreal>(0, m_virtualPointerPosition.y(), frameSize.height()));
-            }
-        }
-    } else {
-        m_virtualPointerPosition = guestPosition;
-        m_hasVirtualPointerPosition = true;
-    }
-    updateCursorPaintPosition();
 
     if (mouseMode() == SPICE_MOUSE_MODE_SERVER) {
         // PS/2-style guests only understand relative motion. This also works
@@ -1692,8 +1625,9 @@ void DomainViewer::updatePointer(const QPointF &position, int buttonMask)
         return;
     }
 
-    const QPointF absolute = m_pointerGrabbed ? m_virtualPointerPosition : guestPosition;
-    spice_inputs_channel_position(m_inputs_channel, qRound(absolute.x()), qRound(absolute.y()), 0, buttonMask);
+    // Client mode is absolute by definition, even while the pointer is
+    // grabbed; accumulating deltas here made the guest cursor drift.
+    spice_inputs_channel_position(m_inputs_channel, qRound(guestPosition.x()), qRound(guestPosition.y()), 0, buttonMask);
     // Do not repaint the scene graph here: the guest cursor is installed as
     // the host cursor, and repainting on every motion event at pointer rate
     // wasted GPU/CPU time (and caused needless present churn).
@@ -1876,8 +1810,6 @@ void DomainViewer::hoverMoveEvent(QHoverEvent *event)
 void DomainViewer::mousePressEvent(QMouseEvent *event)
 {
     qCDebug(KARTON_DEBUG) << "Mouse click at (" << event->position().x() << "," << event->position().y() << ") button:" << event->button();
-    m_localPointerPosition = event->position();
-    m_hasLocalPointerPosition = true;
     m_lastPointerPosition = event->position();
     m_hasLastPointerPosition = true;
     // On Wayland the viewer must be the active window before Qt can read the

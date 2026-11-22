@@ -708,8 +708,8 @@ list in the root `CMakeLists.txt`, otherwise it will not be bundled.
   tearing surfaces on Astra/GL guests. The original SPICE buffer is unmapped by
   spice-gtk when the guest changes resolution (notably while Windows boots);
   keeping a texture from that pointer crashed `QSGBatchRenderer::prepareRenderPass`.
-  `updatePaintNode()` must clear its cached `m_displayNode`/`m_cursorNode`
-  pointers when Qt passes a null root after deleting the scene graph. Renderers
+  `updatePaintNode()` must clear its cached `m_displayNode` pointer when Qt
+  passes a null root after deleting the scene graph. Renderers
   return `nullptr` instead of deleting a node that is already attached;
   `DomainViewer` detaches the old display node from its root and deletes it.
   Display textures use `QSGTexture::Linear` filtering so fonts stay readable

@@ -25,7 +25,6 @@
 
 #include <memory>
 
-class QSGSimpleTextureNode;
 class ClipboardManager;
 class Karton;
 
@@ -212,7 +211,6 @@ private:
     void updateConsoleEvents();
 
     static void cursorSetCallback(SpiceCursorChannel *channel, gint width, gint height, gint hotX, gint hotY, gpointer rgba, gpointer userData);
-    static void cursorMoveCallback(SpiceCursorChannel *channel, gint x, gint y, gpointer userData);
     static void mainAgentUpdateCallback(SpiceMainChannel *channel, gpointer userData);
     static void cursorHideCallback(SpiceCursorChannel *channel, gpointer userData);
     static void cursorResetCallback(SpiceCursorChannel *channel, gpointer userData);
@@ -234,7 +232,6 @@ private:
     void readRecordingData();
 
     void updatePointer(const QPointF &position, int buttonMask);
-    void updateCursorPaintPosition();
     QPointF guestPositionForLocal(const QPointF &position) const;
     int mouseMode() const;
 
@@ -283,10 +280,6 @@ private:
     bool m_agentConnected = false;
     QPointF m_lastPointerPosition;
     bool m_hasLastPointerPosition = false;
-    QPointF m_localPointerPosition;
-    bool m_hasLocalPointerPosition = false;
-    QPointF m_virtualPointerPosition;
-    bool m_hasVirtualPointerPosition = false;
 
     PipeWireAudioSink *m_audioPipeWire = nullptr;
     // Guest mixer state from SPICE_PLAYBACK_CAP_VOLUME messages, in the
@@ -310,12 +303,8 @@ private:
 
     QMutex m_cursorMutex;
     QImage m_cursorImage;
-    QPoint m_cursorPosition;
     QPoint m_cursorHotspot;
     bool m_cursorVisible = false;
-    bool m_cursorTextureDirty = true;
-    QPointF m_cursorPaintPosition;
-    bool m_hasCursorPaintPosition = false;
     bool m_pointerInside = false;
     QSize m_lastDisplayResolution;
     // Coalesces the geometry burst while a window is restored from fullscreen:
@@ -327,7 +316,6 @@ private:
     int m_fixedDisplayHeight = 0;
 
     QSGNode *m_displayNode = nullptr;
-    QSGSimpleTextureNode *m_cursorNode = nullptr;
     bool m_previewGrabPending = false;
     QElapsedTimer m_livePreviewTimer;
     // Preview-only connections can be dropped when a real viewer takes over
