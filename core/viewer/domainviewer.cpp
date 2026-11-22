@@ -1935,6 +1935,17 @@ void DomainViewer::mousePressEvent(QMouseEvent *event)
         m_current_button_mask |= SPICE_MOUSE_BUTTON_MASK_RIGHT;
         spice_inputs_channel_button_press(m_inputs_channel, SPICE_MOUSE_BUTTON_RIGHT, m_current_button_mask);
         break;
+    // The extra side buttons are the back/forward buttons of a five-button
+    // mouse. SPICE calls them side and extra, and the guest sees them as X11
+    // buttons 8 and 9 (XBUTTON1/XBUTTON2 on Windows).
+    case Qt::BackButton:
+        m_current_button_mask |= SPICE_MOUSE_BUTTON_MASK_SIDE;
+        spice_inputs_channel_button_press(m_inputs_channel, SPICE_MOUSE_BUTTON_SIDE, m_current_button_mask);
+        break;
+    case Qt::ForwardButton:
+        m_current_button_mask |= SPICE_MOUSE_BUTTON_MASK_EXTRA;
+        spice_inputs_channel_button_press(m_inputs_channel, SPICE_MOUSE_BUTTON_EXTRA, m_current_button_mask);
+        break;
     default:
         return;
     }
@@ -1963,6 +1974,14 @@ void DomainViewer::mouseReleaseEvent(QMouseEvent *event)
     case Qt::RightButton:
         button = SPICE_MOUSE_BUTTON_RIGHT;
         m_current_button_mask &= ~SPICE_MOUSE_BUTTON_MASK_RIGHT;
+        break;
+    case Qt::BackButton:
+        button = SPICE_MOUSE_BUTTON_SIDE;
+        m_current_button_mask &= ~SPICE_MOUSE_BUTTON_MASK_SIDE;
+        break;
+    case Qt::ForwardButton:
+        button = SPICE_MOUSE_BUTTON_EXTRA;
+        m_current_button_mask &= ~SPICE_MOUSE_BUTTON_MASK_EXTRA;
         break;
     default:
         return;
